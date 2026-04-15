@@ -26,6 +26,6 @@
 ## Last Confirmed State
 
 - Reviewed on: `2026-04-15`
-- Baseline commit: `e2c849e`
+- Baseline reference: current local `HEAD` when the healthcheck is executed
 - Expected published versions during this review: `0.1.1` for both public packages
 - Last known classification before this run: `HEALTHY`

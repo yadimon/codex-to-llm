@@ -77,6 +77,8 @@ function main(): void {
     syncServerDependencyToCore();
   }
 
+  refreshWorkspaceLockfile();
+
   const packageJson = JSON.parse(fs.readFileSync(workspacePackageJsonPath, "utf8")) as {
     version: string;
   };
@@ -108,6 +110,10 @@ function syncServerDependencyToCore(): void {
   };
 
   fs.writeFileSync(serverPackageJsonPath, `${JSON.stringify(serverPackageJson, null, 2)}\n`);
+}
+
+function refreshWorkspaceLockfile(): void {
+  runNpm(["install", "--package-lock-only", "--ignore-scripts"]);
 }
 
 try {

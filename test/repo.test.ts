@@ -29,6 +29,20 @@ const healthCheckProfile = fs.readFileSync(
   path.join(repoRoot, "skills", "healthcheck", "skill-profile.md"),
   "utf8"
 );
+const lockfile = JSON.parse(
+  fs.readFileSync(path.join(repoRoot, "package-lock.json"), "utf8")
+) as {
+  packages: Record<string, { version?: string; dependencies?: Record<string, string> }>;
+};
+const corePackageJson = JSON.parse(
+  fs.readFileSync(path.join(repoRoot, "packages", "codex-to-llm", "package.json"), "utf8")
+) as { version: string };
+const serverPackageJson = JSON.parse(
+  fs.readFileSync(path.join(repoRoot, "packages", "codex-to-llm-server", "package.json"), "utf8")
+) as {
+  version: string;
+  dependencies: Record<string, string>;
+};
 
 test("root package.json keeps workspace verification wired through npm test", () => {
   assert.equal(rootPackageJson.private, true);
@@ -75,10 +89,20 @@ test("publish workflow keeps trusted publishing and package-specific tag guards"
 test("release script keeps annotated tags, explicit pushes, and core-to-server sync", () => {
   assert.match(releaseScript, /Working tree must be clean before creating a release commit/);
   assert.match(releaseScript, /runNpm\(\["run", "check"\]\)/);
+  assert.match(releaseScript, /runNpm\(\["install", "--package-lock-only", "--ignore-scripts"\]\)/);
   assert.match(releaseScript, /runGit\(\["tag", "-a", tagName, "-m", `Release \$\{tagName\}`\]\)/);
   assert.match(releaseScript, /runGit\(\["push", "origin", "HEAD", tagName\]\)/);
   assert.match(releaseScript, /if \(releaseWorkspace === "@yadimon\/codex-to-llm"\)/);
   assert.match(releaseScript, /"@yadimon\/codex-to-llm": `\^\$\{corePackageJson\.version\}`/);
+});
+
+test("lockfile stays aligned with workspace package versions and server dependency", () => {
+  assert.equal(lockfile.packages["packages/codex-to-llm"]?.version, corePackageJson.version);
+  assert.equal(lockfile.packages["packages/codex-to-llm-server"]?.version, serverPackageJson.version);
+  assert.equal(
+    lockfile.packages["packages/codex-to-llm-server"]?.dependencies?.["@yadimon/codex-to-llm"],
+    serverPackageJson.dependencies["@yadimon/codex-to-llm"]
+  );
 });
 
 test("health-check artifacts exist and document the mandatory health commands", () => {

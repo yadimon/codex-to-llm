@@ -4,7 +4,7 @@
 
 - Repository: `yadimon/codex-to-llm`
 - Objective: verify that the workspace is locally healthy, releasable, and aligned with the currently published `0.1.1` packages.
-- Baseline commit at generation time: `e2c849e`
+- Baseline reference: current local `HEAD` at execution time
 - Last reviewed: `2026-04-15`
 
 ## Preconditions
@@ -70,7 +70,7 @@
 
 | ID | Status | Evidence |
 | --- | --- | --- |
-| HC-AUTO-001 | pass | `git status --short` returned no output on `e2c849e` |
+| HC-AUTO-001 | pass | `git status --short` returned no output on the local `HEAD` reviewed on `2026-04-15` |
 | HC-AUTO-002 | pass | `npm run verify` exited `0` after lint, typecheck, tests, e2e, and both workspace builds |
 | HC-AUTO-003 | pass | `npm run check` exited `0` after `verify`, `pack`, and `publish:dry-run` for both packages |
 | HC-AUTO-004 | pass | `npm run test:docker` exited `0` and rebuilt the server image successfully |
