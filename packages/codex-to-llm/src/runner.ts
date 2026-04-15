@@ -273,10 +273,11 @@ export function streamResponse(
     finalizeFailure(normalizeSpawnError(error, cliPath));
   });
 
-  child.on("close", code => {
+  child.on("close", (code, signal) => {
     setImmediate(() => {
-      if (code && code !== 0) {
-        finalizeFailure(new Error(stderr.trim() || `Codex exited with code ${code}`));
+      const exitError = createCodexExitError(code, signal, stderr);
+      if (exitError) {
+        finalizeFailure(exitError);
         return;
       }
 
@@ -356,6 +357,23 @@ function appendBounded(current: string, nextChunk: string): string {
 
   const tailLength = MAX_STDERR_LENGTH - "\n[stderr truncated]".length;
   return `${combined.slice(-tailLength)}\n[stderr truncated]`;
+}
+
+export function createCodexExitError(
+  code: number | null,
+  signal: NodeJS.Signals | null,
+  stderr: string
+): Error | undefined {
+  const normalizedStderr = stderr.trim();
+  if (signal) {
+    return new Error(normalizedStderr || `Codex exited due to signal ${signal}`);
+  }
+
+  if (code !== 0) {
+    return new Error(normalizedStderr || `Codex exited with code ${code}`);
+  }
+
+  return undefined;
 }
 
 function withCleanupPreserved(error: unknown, cleanupTasks: Array<() => void>): Error {

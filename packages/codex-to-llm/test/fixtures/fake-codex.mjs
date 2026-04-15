@@ -21,6 +21,11 @@ process.stdin.on("data", chunk => {
 });
 
 process.stdin.on("end", () => {
+  if (process.env.FAKE_CODEX_TERMINATE_SIGNAL) {
+    process.kill(process.pid, process.env.FAKE_CODEX_TERMINATE_SIGNAL);
+    return;
+  }
+
   const trimmed = stdin.trim();
   const message = fs.existsSync(process.env.FAKE_CODEX_RESPONSE_FILE || "")
     ? fs.readFileSync(process.env.FAKE_CODEX_RESPONSE_FILE, "utf8").trim()

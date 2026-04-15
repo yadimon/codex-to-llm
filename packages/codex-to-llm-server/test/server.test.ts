@@ -400,6 +400,55 @@ test("server does not send DONE after a streaming failure", async () => {
   }
 });
 
+test("server reports a failed SSE stream when no completed response arrives", async () => {
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    runner: {
+      async runResponse() {
+        throw new Error("not used");
+      },
+      async *streamResponse(): AsyncGenerator<StreamEvent> {
+        yield {
+          type: "response.started",
+          response: {
+            id: "resp_stream",
+            model: "gpt-5.3-codex-spark",
+            instructions: undefined,
+            messages: [],
+            createdAt: 1
+          }
+        };
+        yield {
+          type: "response.output_text.delta",
+          delta: "partial"
+        };
+      }
+    }
+  });
+
+  try {
+    const response = await fetch(`${started.url}/v1/responses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        stream: true,
+        input: "Hello"
+      })
+    });
+    const text = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(text, /event: response.failed/);
+    assert.match(text, /Runner stream ended without a completed response/);
+    assert.doesNotMatch(text, /data: \[DONE\]/);
+  } finally {
+    await started.close();
+  }
+});
+
 
 test("server rejects oversized request bodies", async () => {
   const started = await startServer({
@@ -424,4 +473,15 @@ test("server rejects oversized request bodies", async () => {
   } finally {
     await started.close();
   }
+});
+
+test("startServer rejects invalid configured ports before listen", async () => {
+  await assert.rejects(
+    startServer({
+      host: "127.0.0.1",
+      port: Number.NaN,
+      runner: createStubRunner()
+    }),
+    /Invalid server port/
+  );
 });

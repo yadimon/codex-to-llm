@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
+  createCodexExitError,
+  runResponse,
   normalizeRunOptions,
   normalizeSpawnError,
   normalizeConversationInput,
@@ -114,4 +120,48 @@ test("normalizeSpawnError provides targeted permission errors", () => {
   const error = normalizeSpawnError({ code: "EACCES" }, "codex");
 
   assert.match(error.message, /not executable/);
+});
+
+test("createCodexExitError prefers signal information over a generic success path", () => {
+  assert.equal(createCodexExitError(0, null, ""), undefined);
+  assert.match(createCodexExitError(null, "SIGTERM", "")?.message || "", /signal SIGTERM/);
+  assert.match(createCodexExitError(1, null, "")?.message || "", /code 1/);
+});
+
+test("runResponse fails when the codex process exits due to a signal", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-signal-"));
+  const authPath = path.join(tempDir, "auth.json");
+  const fixturePath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "./fixtures/fake-codex.mjs"
+  );
+  const cliPath =
+    process.platform === "win32"
+      ? path.join(tempDir, "fake-codex.cmd")
+      : fixturePath;
+  fs.writeFileSync(authPath, JSON.stringify({ access_token: "test-token" }), "utf8");
+  if (process.platform === "win32") {
+    fs.writeFileSync(cliPath, `@echo off\r\n"${process.execPath}" "${fixturePath}" %*\r\n`, "utf8");
+  }
+
+  const previousSignal = process.env.FAKE_CODEX_TERMINATE_SIGNAL;
+  process.env.FAKE_CODEX_TERMINATE_SIGNAL = "SIGTERM";
+
+  try {
+    await assert.rejects(
+      runResponse("Hello", {
+        authPath,
+        cliPath,
+        timeout: 5000
+      }),
+      /signal SIGTERM|code 1/
+    );
+  } finally {
+    if (previousSignal == null) {
+      delete process.env.FAKE_CODEX_TERMINATE_SIGNAL;
+    } else {
+      process.env.FAKE_CODEX_TERMINATE_SIGNAL = previousSignal;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });

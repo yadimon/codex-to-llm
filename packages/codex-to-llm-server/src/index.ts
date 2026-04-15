@@ -67,7 +67,7 @@ const VALID_REASONING_EFFORTS = new Set(["low", "medium", "high"]);
 
 export function createServer(options: ServerOptions = {}) {
   const host = options.host || process.env.CODEX_TO_LLM_SERVER_HOST || DEFAULT_HOST;
-  const port = options.port ?? Number(process.env.CODEX_TO_LLM_SERVER_PORT || DEFAULT_PORT);
+  const port = normalizeServerPort(options.port ?? process.env.CODEX_TO_LLM_SERVER_PORT ?? DEFAULT_PORT);
   const runner = options.runner || createDefaultRunner(options);
   const models = resolveModels(options);
   const apiKey = options.apiKey || process.env.COMPAT_API_KEY || process.env.CODEX_TO_LLM_SERVER_API_KEY;
@@ -461,6 +461,15 @@ async function streamOpenAIResponse(
     );
   }
 
+  if (!hasError && !finalResponse) {
+    hasError = true;
+    writeSse(
+      response,
+      "response.failed",
+      createErrorBody("server_error", "Runner stream ended without a completed response")
+    );
+  }
+
   if (!hasError) {
     response.write("data: [DONE]\n\n");
   }
@@ -505,6 +514,21 @@ function buildModelsResponse(models: string[]) {
       owned_by: "yadimon"
     }))
   };
+}
+
+function normalizeServerPort(value: number | string): number {
+  const numericPort =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number.parseInt(value, 10)
+        : Number.NaN;
+
+  if (!Number.isInteger(numericPort) || numericPort < 0 || numericPort > 65535) {
+    throw new Error("Invalid server port: expected an integer between 0 and 65535");
+  }
+
+  return numericPort;
 }
 
 function sendJson(response: ServerResponse, statusCode: number, body: unknown): void {
