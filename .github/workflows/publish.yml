@@ -51,7 +51,13 @@ jobs:
           fi
 
       - name: Verify repository
-        run: npm run check
+        run: npm run verify
+
+      - name: Pack
+        run: npm run pack
+
+      - name: Publish dry run
+        run: npm run publish:dry-run
 
       - name: Publish core package to npm with Trusted Publishing
         run: npm publish --workspace @yadimon/codex-to-llm
@@ -88,7 +94,13 @@ jobs:
           fi
 
       - name: Verify repository
-        run: npm run check
+        run: npm run verify
+
+      - name: Pack
+        run: npm run pack
+
+      - name: Publish dry run
+        run: npm run publish:dry-run
 
       - name: Publish server package to npm with Trusted Publishing
         run: npm publish --workspace @yadimon/codex-to-llm-server

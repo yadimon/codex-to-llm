@@ -11,6 +11,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         node-version:
           - 20
@@ -29,8 +30,23 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Verify repository
-        run: npm run check
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack
+        run: npm run pack
+
+      - name: Publish dry run
+        run: npm run publish:dry-run
 
   docker:
     runs-on: ubuntu-latest
