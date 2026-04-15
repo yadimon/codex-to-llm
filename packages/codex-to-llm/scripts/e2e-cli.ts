@@ -10,6 +10,10 @@ const fakeCodexPath =
     ? path.join(packageRoot, "test", "fixtures", "fake-codex.cmd")
     : path.join(packageRoot, "test", "fixtures", "fake-codex.mjs");
 
+if (process.platform !== "win32") {
+  fs.chmodSync(fakeCodexPath, 0o755);
+}
+
 function makeTempFile(name: string, content: string) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-e2e-"));
   const file = path.join(dir, name);
