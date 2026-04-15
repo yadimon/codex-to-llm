@@ -17,6 +17,10 @@ function makeTempFile(name: string, content: string) {
   return { dir, file };
 }
 
+function makeTempAuth() {
+  return makeTempFile("auth.json", "{\"token\":\"test\"}\n");
+}
+
 function runCli(args: string[], options: { env?: NodeJS.ProcessEnv; input?: string } = {}) {
   return spawnSync(process.execPath, ["--import", "tsx/esm", "./src/cli.ts", ...args], {
     cwd: packageRoot,
@@ -30,6 +34,7 @@ function runCli(args: string[], options: { env?: NodeJS.ProcessEnv; input?: stri
 }
 
 {
+  const { dir: authDir, file: authFile } = makeTempAuth();
   const { dir, file } = makeTempFile(
     "chat.json",
     JSON.stringify(
@@ -43,7 +48,11 @@ function runCli(args: string[], options: { env?: NodeJS.ProcessEnv; input?: stri
   );
 
   try {
-    const result = runCli(["--input-file", file, "--json", "--cli", fakeCodexPath]);
+    const result = runCli(["--input-file", file, "--json", "--cli", fakeCodexPath], {
+      env: {
+        CODEX_TO_LLM_AUTH_PATH: authFile
+      }
+    });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const parsed = JSON.parse(result.stdout);
     assert.match(parsed.content, /FAKE:/);
@@ -51,11 +60,16 @@ function runCli(args: string[], options: { env?: NodeJS.ProcessEnv; input?: stri
     assert.equal(parsed.messages[0].content, "Hello from file");
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(authDir, { recursive: true, force: true });
   }
 }
 
 {
+  const { dir: authDir, file: authFile } = makeTempAuth();
   const result = runCli(["--stdin-json", "--stream", "--json", "--cli", fakeCodexPath], {
+    env: {
+      CODEX_TO_LLM_AUTH_PATH: authFile
+    },
     input: JSON.stringify({
       input: [{ role: "user", content: "Hello from stdin" }]
     })
@@ -70,6 +84,8 @@ function runCli(args: string[], options: { env?: NodeJS.ProcessEnv; input?: stri
   assert.equal(events[0].type, "response.started");
   assert.equal(events.some(event => event.type === "response.output_text.delta"), true);
   assert.equal(events.at(-1).type, "response.completed");
+
+  fs.rmSync(authDir, { recursive: true, force: true });
 }
 
 console.log("codex-to-llm CLI e2e passed");
