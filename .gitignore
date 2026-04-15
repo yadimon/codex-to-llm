@@ -1,0 +1,8 @@
+node_modules/
+*.tgz
+.npm-cache/
+packages/*/.npm-cache/
+.codex-to-llm/
+.codex-minimal/
+tmp-auth/
+.idea/

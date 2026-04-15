@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": false,
+    "skipLibCheck": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "paths": {
+      "@yadimon/codex-to-llm": ["./packages/codex-to-llm/src/index.ts"],
+      "@yadimon/codex-to-llm-server": ["./packages/codex-to-llm-server/src/index.ts"]
+    }
+  }
+}

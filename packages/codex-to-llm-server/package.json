@@ -1,0 +1,51 @@
+{
+  "name": "@yadimon/codex-to-llm-server",
+  "version": "0.1.0",
+  "description": "OpenAI-compatible Responses server on top of @yadimon/codex-to-llm",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "codex-to-llm-server": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "README.md",
+    "LICENSE",
+    "Dockerfile"
+  ],
+  "scripts": {
+    "build": "node --input-type=module --eval \"import fs from 'node:fs'; fs.rmSync('dist', { recursive: true, force: true });\" && tsc -p tsconfig.json",
+    "e2e": "tsx ./scripts/e2e-server.ts",
+    "lint": "eslint src test scripts",
+    "release:check": "tsx ./scripts/release-check.ts",
+    "smoke": "tsx ./scripts/smoke-server.ts",
+    "start": "tsx ./src/cli.ts",
+    "start:mock": "tsx ./scripts/start-mock-server.ts",
+    "test:docker": "tsx ./scripts/docker-e2e.ts",
+    "prepack": "npm run test && npm run build",
+    "test": "tsx ./scripts/run-node-tests.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@yadimon/codex-to-llm": "^0.1.0"
+  },
+  "keywords": [
+    "codex",
+    "openai",
+    "responses",
+    "server",
+    "compatibility"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  }
+}

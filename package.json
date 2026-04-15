@@ -1,0 +1,31 @@
+{
+  "name": "codex-to-llm-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "start:server": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server start",
+    "start:server:mock": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server start:mock",
+    "build": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm build && tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server build",
+    "lint": "eslint .",
+    "typecheck": "tsc -b --pretty false",
+    "test": "tsx ./scripts/run-workspace-tests.ts",
+    "test:docker": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server test:docker",
+    "test:all": "tsx ./scripts/run-workspace-tests.ts && tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server test:docker",
+    "release:check": "tsx ./scripts/workspace-release-check.ts",
+    "smoke:core": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm smoke:sdk",
+    "smoke:server": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server smoke"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.9.1",
+    "eslint": "^9.39.1",
+    "globals": "^16.4.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.1"
+  }
+}

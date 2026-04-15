@@ -1,0 +1,46 @@
+{
+  "name": "@yadimon/codex-to-llm",
+  "version": "0.1.0",
+  "description": "Minimal LLM-style SDK and CLI wrapper around codex exec",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "codex-to-llm": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "auth:copy": "tsx ./scripts/copy-auth.ts",
+    "build": "node --input-type=module --eval \"import fs from 'node:fs'; fs.rmSync('dist', { recursive: true, force: true });\" && tsc -p tsconfig.json",
+    "e2e": "tsx ./scripts/e2e-cli.ts",
+    "lint": "eslint src test scripts",
+    "release:check": "tsx ./scripts/release-check.ts",
+    "smoke:cli": "tsx ./src/cli.ts --prompt \"Hi\" --json --model gpt-5.3-codex-spark",
+    "smoke:sdk": "tsx ./scripts/smoke-sdk.ts",
+    "prepack": "npm run test && npm run build",
+    "test": "tsx ./scripts/run-node-tests.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "keywords": [
+    "codex",
+    "llm",
+    "cli",
+    "sdk",
+    "openai"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  }
+}

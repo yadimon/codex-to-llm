@@ -1,0 +1,7 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/codex-to-llm" },
+    { "path": "./packages/codex-to-llm-server" }
+  ]
+}
