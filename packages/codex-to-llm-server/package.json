@@ -1,6 +1,6 @@
 {
   "name": "@yadimon/codex-to-llm-server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "OpenAI-compatible Responses server on top of @yadimon/codex-to-llm",
   "type": "module",
   "main": "./dist/index.js",
