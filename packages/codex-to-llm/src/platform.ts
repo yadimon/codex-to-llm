@@ -27,10 +27,21 @@ export function assertCliPathExists(cliPath: string, platform = process.platform
 }
 
 export function normalizeSpawnError(error: unknown, cliPath: string): Error {
-  if (typeof error === "object" && error && "code" in error && error.code === "ENOENT") {
-    return new Error(
-      `Codex CLI not found at ${cliPath}. Install the Codex CLI or pass --cli / CODEX_TO_LLM_CLI_PATH.`
-    );
+  if (typeof error === "object" && error && "code" in error) {
+    switch (error.code) {
+      case "ENOENT":
+        return new Error(
+          `Codex CLI not found at ${cliPath}. Install the Codex CLI or pass --cli / CODEX_TO_LLM_CLI_PATH.`
+        );
+      case "EACCES":
+      case "EPERM":
+        return new Error(`Codex CLI at ${cliPath} is not executable. Check file permissions.`);
+      case "EISDIR":
+      case "ENOTDIR":
+        return new Error(`Codex CLI path ${cliPath} is invalid. Check that it points to an executable.`);
+      default:
+        break;
+    }
   }
 
   if (error instanceof Error) {

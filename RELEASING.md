@@ -66,6 +66,7 @@ These scripts:
 
 - run `npm run check`
 - bump only the selected workspace version
+- update the server's `@yadimon/codex-to-llm` dependency automatically when releasing core
 - create a release commit
 - create a package-specific Git tag
 - push the commit and tag to `origin`
@@ -79,7 +80,8 @@ Core package:
 ```bash
 npm run check
 npm version patch --workspace @yadimon/codex-to-llm --no-git-tag-version
-git add package-lock.json packages/codex-to-llm/package.json
+node -e "const fs=require('node:fs'); const p='packages/codex-to-llm-server/package.json'; const pkg=JSON.parse(fs.readFileSync(p,'utf8')); pkg.dependencies['@yadimon/codex-to-llm']='^<version>'; fs.writeFileSync(p, JSON.stringify(pkg, null, 2)+'\n');"
+git add package-lock.json packages/codex-to-llm/package.json packages/codex-to-llm-server/package.json
 git commit -m "release(codex-to-llm): <version>"
 git tag codex-to-llm-v<version>
 git push origin HEAD --follow-tags
@@ -99,5 +101,5 @@ git push origin HEAD --follow-tags
 ## Notes
 
 - `repository`, `homepage`, and `bugs` in both package manifests must match the canonical GitHub repository.
-- `@yadimon/codex-to-llm-server` depends on `@yadimon/codex-to-llm`; if the server should depend on a newer core version, update that dependency before releasing the server package.
+- `@yadimon/codex-to-llm-server` depends on `@yadimon/codex-to-llm`; core releases update that dependency range automatically.
 - The publish workflow verifies that the pushed tag matches the target package version exactly.

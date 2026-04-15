@@ -20,6 +20,7 @@ import {
 import type {
   ConversationInput,
   CoreResponse,
+  NormalizedRunOptions,
   ResponseShell,
   RunOptions,
   Runner,
@@ -61,10 +62,8 @@ export function streamResponse(
 ): AsyncIterable<StreamEvent> {
   const normalizedInput = normalizeConversationInput(input);
   const prompt = serializeConversationInput(normalizedInput);
-  const model = options.model || DEFAULT_MODEL;
-  const reasoningEffort = options.reasoningEffort || DEFAULT_REASONING_EFFORT;
-  const maxTokens = Number.isFinite(options.maxTokens) ? Number(options.maxTokens) : DEFAULT_MAX_TOKENS;
-  const sandbox = options.sandbox || DEFAULT_SANDBOX;
+  const normalizedOptions = normalizeRunOptions(options);
+  const { model, reasoningEffort, maxTokens, sandbox, timeoutMs } = normalizedOptions;
   const cliPath =
     options.cliPath || process.env.CODEX_TO_LLM_CLI_PATH || process.env.CODEX_CLI_PATH || "codex";
   assertCliPathExists(cliPath);
@@ -94,7 +93,6 @@ export function streamResponse(
   let stderr = "";
   let stdoutBuffer = "";
   let usage: UsageSummary = createEmptyUsage();
-  const timeoutMs = options.timeout ?? 5 * 60 * 1000;
 
   const cliArgs = [
     "exec",
@@ -263,7 +261,7 @@ export function streamResponse(
   });
 
   child.stderr.on("data", chunk => {
-    stderr += chunk.toString();
+    stderr = appendBounded(stderr, chunk.toString());
   });
 
   child.stdin.on("error", error => {
@@ -295,6 +293,57 @@ export function streamResponse(
 }
 
 export const execCodex = runResponse;
+
+const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+const MAX_STDERR_LENGTH = 64 * 1024;
+const CLI_TOKEN_PATTERN = /^[A-Za-z0-9._:/-]+$/;
+
+export function normalizeRunOptions(options: RunOptions = {}): NormalizedRunOptions {
+  return {
+    model: normalizeCliToken(options.model, DEFAULT_MODEL, "model"),
+    reasoningEffort: normalizeCliToken(
+      options.reasoningEffort,
+      DEFAULT_REASONING_EFFORT,
+      "reasoning effort"
+    ),
+    maxTokens: Number.isFinite(options.maxTokens) ? Number(options.maxTokens) : DEFAULT_MAX_TOKENS,
+    sandbox: normalizeCliToken(options.sandbox, DEFAULT_SANDBOX, "sandbox"),
+    timeoutMs: normalizeTimeout(options.timeout)
+  };
+}
+
+function normalizeCliToken(value: string | undefined, fallback: string, fieldName: string): string {
+  const normalized = value || fallback;
+  if (!CLI_TOKEN_PATTERN.test(normalized) || normalized.startsWith("-")) {
+    throw new Error(
+      `Invalid ${fieldName}: expected letters, digits, dots, colons, slashes, underscores, or hyphens`
+    );
+  }
+
+  return normalized;
+}
+
+function normalizeTimeout(value: number | undefined): number {
+  if (value == null) {
+    return DEFAULT_TIMEOUT_MS;
+  }
+
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error("Invalid timeout: expected a positive finite number of milliseconds");
+  }
+
+  return Math.floor(value);
+}
+
+function appendBounded(current: string, nextChunk: string): string {
+  const combined = current + nextChunk;
+  if (combined.length <= MAX_STDERR_LENGTH) {
+    return combined;
+  }
+
+  const tailLength = MAX_STDERR_LENGTH - "\n[stderr truncated]".length;
+  return `${combined.slice(-tailLength)}\n[stderr truncated]`;
+}
 
 function createResponseShell({
   responseId,

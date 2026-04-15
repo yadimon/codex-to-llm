@@ -16,6 +16,14 @@ export interface RunOptions {
   responseId?: string;
 }
 
+export interface NormalizedRunOptions {
+  model: string;
+  reasoningEffort: string;
+  maxTokens: number;
+  timeoutMs: number;
+  sandbox: string;
+}
+
 export interface NormalizedMessage {
   role: "system" | "developer" | "user" | "assistant";
   content: string;

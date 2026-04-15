@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  normalizeRunOptions,
+  normalizeSpawnError,
   normalizeConversationInput,
   serializeConversationInput
 } from "../src/index.js";
@@ -68,4 +70,37 @@ test("serializeConversationInput preserves leading spaces and trailing newlines"
   });
 
   assert.equal(prompt.includes("### user\n  line one\nline two\n\n"), true);
+});
+
+test("normalizeRunOptions rejects invalid CLI-facing values", () => {
+  assert.throws(
+    () => normalizeRunOptions({ reasoningEffort: 'high"; bad' }),
+    /Invalid reasoning effort/
+  );
+  assert.throws(
+    () => normalizeRunOptions({ model: "--bad-model" }),
+    /Invalid model/
+  );
+  assert.throws(
+    () => normalizeRunOptions({ sandbox: "workspace write" }),
+    /Invalid sandbox/
+  );
+});
+
+test("normalizeRunOptions rejects invalid timeout values", () => {
+  assert.throws(
+    () => normalizeRunOptions({ timeout: -1 }),
+    /Invalid timeout/
+  );
+  assert.throws(
+    () => normalizeRunOptions({ timeout: Number.NaN }),
+    /Invalid timeout/
+  );
+  assert.equal(normalizeRunOptions({ timeout: 1500.9 }).timeoutMs, 1500);
+});
+
+test("normalizeSpawnError provides targeted permission errors", () => {
+  const error = normalizeSpawnError({ code: "EACCES" }, "codex");
+
+  assert.match(error.message, /not executable/);
 });

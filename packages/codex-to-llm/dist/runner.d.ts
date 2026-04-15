@@ -1,6 +1,7 @@
-import type { ConversationInput, CoreResponse, RunOptions, Runner, StreamEvent } from "./types.js";
+import type { ConversationInput, CoreResponse, NormalizedRunOptions, RunOptions, Runner, StreamEvent } from "./types.js";
 export declare function createRunner(baseOptions?: RunOptions): Runner;
 export declare function runResponse(input: ConversationInput, options?: RunOptions): Promise<CoreResponse>;
 export declare function streamResponse(input: ConversationInput, options?: RunOptions): AsyncIterable<StreamEvent>;
 export declare const execCodex: typeof runResponse;
+export declare function normalizeRunOptions(options?: RunOptions): NormalizedRunOptions;
 //# sourceMappingURL=runner.d.ts.map

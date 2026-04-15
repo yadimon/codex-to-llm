@@ -30,6 +30,7 @@ const workspacePackageJsonPath = path.join(
   releaseWorkspace.replace(/^@[^/]+\//, ""),
   "package.json"
 );
+const serverPackageJsonPath = path.join(repoRoot, "packages", "codex-to-llm-server", "package.json");
 
 function runGit(args: string[]): string {
   return execFileSync("git", args, {
@@ -72,16 +73,41 @@ function main(): void {
   runNpm(["run", "check"]);
   runNpm(["version", releaseBumpType, "--workspace", releaseWorkspace, "--no-git-tag-version"]);
 
+  if (releaseWorkspace === "@yadimon/codex-to-llm") {
+    syncServerDependencyToCore();
+  }
+
   const packageJson = JSON.parse(fs.readFileSync(workspacePackageJsonPath, "utf8")) as {
     version: string;
   };
   const version = packageJson.version;
   const tagName = `${releaseTagPrefix}-v${version}`;
 
-  runGit(["add", "package-lock.json", workspacePackageJsonPath]);
+  const filesToAdd = ["package-lock.json", workspacePackageJsonPath];
+  if (releaseWorkspace === "@yadimon/codex-to-llm") {
+    filesToAdd.push(serverPackageJsonPath);
+  }
+
+  runGit(["add", ...filesToAdd]);
   runGit(["commit", "-m", `release(${releaseTagPrefix}): ${version}`]);
   runGit(["tag", tagName]);
   runGit(["push", "origin", "HEAD", "--follow-tags"]);
+}
+
+function syncServerDependencyToCore(): void {
+  const corePackageJson = JSON.parse(fs.readFileSync(workspacePackageJsonPath, "utf8")) as {
+    version: string;
+  };
+  const serverPackageJson = JSON.parse(fs.readFileSync(serverPackageJsonPath, "utf8")) as {
+    dependencies?: Record<string, string>;
+  };
+
+  serverPackageJson.dependencies = {
+    ...serverPackageJson.dependencies,
+    "@yadimon/codex-to-llm": `^${corePackageJson.version}`
+  };
+
+  fs.writeFileSync(serverPackageJsonPath, `${JSON.stringify(serverPackageJson, null, 2)}\n`);
 }
 
 try {

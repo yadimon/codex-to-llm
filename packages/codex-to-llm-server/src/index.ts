@@ -258,6 +258,8 @@ function buildMockCoreResponse(
       ? input.input
       : JSON.stringify(input.input ?? "", null, 2)
     : "";
+  const inputTokens = Math.ceil(normalizedInput.length / 4);
+  const outputTokens = Math.ceil(content.length / 4);
 
   return {
     id: `resp_mock_${randomUUID().replace(/-/g, "")}`,
@@ -272,10 +274,10 @@ function buildMockCoreResponse(
     createdAt: Math.floor(Date.now() / 1000),
     content,
     usage: {
-      inputTokens: Math.ceil(normalizedInput.length / 4),
+      inputTokens,
       cachedInputTokens: 0,
-      outputTokens: Math.ceil(content.length / 4),
-      totalTokens: Math.ceil(normalizedInput.length / 4) + Math.ceil(content.length / 4)
+      outputTokens,
+      totalTokens: inputTokens + outputTokens
     },
     raw: {
       stderr: "",
