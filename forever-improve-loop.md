@@ -101,7 +101,8 @@ Track only tasks that fit guardrails.
 | Q-001 | P0 | baseline | workspace | Keep Tier 0 and Tier 1 green before any further maintenance work | `npm run verify` | done |
 | Q-002 | P1 | reliability | `packages/codex-to-llm/package.json`, `packages/codex-to-llm-server/package.json` | Harden `dist` cleanup in build scripts against transient Windows removal failures | `npm test --workspace @yadimon/codex-to-llm`; `npm test --workspace @yadimon/codex-to-llm-server`; `npm run check` | done |
 | Q-003 | P1 | docs | repo maintenance files | Keep repo-local maintenance inventory and defaults aligned with the actual workspace | update maintenance files | done |
-| Q-004 | P2 | docs | release and README docs | Recheck docs drift after the next release-flow change | `npm run check` | todo |
+| Q-004 | P1 | docs | `README.md`, `RELEASING.md` | Align release and root docs with the current published `0.1.1` state and remove stale wording or encoding artifacts | `npm run verify` | done |
+| Q-005 | P2 | docs | package READMEs | Recheck package-level docs drift after the next release-flow change | `npm run verify` | todo |
 
 Priority:
 - P0: failing checks, flaky tests, reproducible bugs, and broken automation.
@@ -282,3 +283,4 @@ Priority:
 
 ## 12) Recent Cycle History
 - 2026-04-15: completed one maintenance cycle to harden both package build scripts with retry-aware `dist` cleanup and added regression assertions in package tests. Verification: `npm run verify`, package-local tests for both packages, and `npm run check`.
+- 2026-04-15: completed one maintenance cycle to align root docs with the actual published `0.1.1` state, remove stale bootstrap wording, and fix visible encoding artifacts in the environment variable table. Verification reused the current green Tier 1 baseline from `npm run verify` and `npm run check`.

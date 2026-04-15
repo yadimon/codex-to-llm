@@ -16,12 +16,14 @@ Do not set `"private": true` in either publishable package. The root workspace s
 
 Examples:
 
-- `codex-to-llm-v0.1.0`
-- `codex-to-llm-server-v0.1.0`
+- `codex-to-llm-v0.1.1`
+- `codex-to-llm-server-v0.1.1`
 
 ## First Publish
 
-Each package needs one manual bootstrap publish before npm Trusted Publishing can be configured.
+This section only matters for a new package name or a fresh registry bootstrap.
+
+For the current published packages, the one-time manual bootstrap publish is already complete.
 
 Before the first publish:
 
