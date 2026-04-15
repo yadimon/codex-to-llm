@@ -1,26 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import net from "node:net";
 
 const packageRoot = process.cwd();
-
-function getFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      server.close(error => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        resolve(typeof address === "object" && address ? address.port : 0);
-      });
-    });
-    server.on("error", reject);
-  });
-}
 
 async function waitForHealth(url: string, timeoutMs = 15000): Promise<void> {
   const startedAt = Date.now();
@@ -41,9 +22,7 @@ async function waitForHealth(url: string, timeoutMs = 15000): Promise<void> {
   throw new Error(`Server did not become healthy at ${url}`);
 }
 
-const port = await getFreePort();
-const url = `http://127.0.0.1:${port}`;
-const child = spawn(process.execPath, ["--import", "tsx/esm", "./src/cli.ts", "--host", "127.0.0.1", "--port", String(port)], {
+const child = spawn(process.execPath, ["--import", "tsx/esm", "./src/cli.ts", "--host", "127.0.0.1", "--port", "0"], {
   cwd: packageRoot,
   env: {
     ...process.env,
@@ -55,15 +34,55 @@ const child = spawn(process.execPath, ["--import", "tsx/esm", "./src/cli.ts", "-
 
 let stdout = "";
 let stderr = "";
+let listenUrl: string | undefined;
 child.stdout.on("data", chunk => {
   stdout += chunk.toString();
+  const match = stdout.match(/codex-to-llm-server listening on (http:\/\/\S+)/);
+  if (match) {
+    listenUrl = match[1];
+  }
 });
 child.stderr.on("data", chunk => {
   stderr += chunk.toString();
 });
 
+function waitForListening(timeoutMs = 30000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+
+    const fail = (message: string) => {
+      cleanup();
+      reject(new Error(`${message}\nstdout:\n${stdout}\nstderr:\n${stderr}`));
+    };
+
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      fail(`Server process exited before becoming ready (code=${code}, signal=${signal})`);
+    };
+
+    const interval = setInterval(() => {
+      if (listenUrl) {
+        cleanup();
+        resolve(listenUrl);
+        return;
+      }
+
+      if (Date.now() - startedAt >= timeoutMs) {
+        fail("Timed out waiting for server startup message");
+      }
+    }, 100);
+
+    const cleanup = () => {
+      clearInterval(interval);
+      child.off("exit", onExit);
+    };
+
+    child.on("exit", onExit);
+  });
+}
+
 try {
-  await waitForHealth(url);
+  const url = await waitForListening();
+  await waitForHealth(url, 30000);
 
   const models = await fetch(`${url}/v1/models`);
   const modelsJson = (await models.json()) as { data: Array<{ id: string }> };
@@ -103,8 +122,13 @@ try {
   assert.match(streamText, /event: response.created/);
   assert.match(streamText, /mock e2e response/);
 } finally {
-  child.kill("SIGTERM");
-  await new Promise(resolve => child.once("exit", resolve));
+  if (!child.killed) {
+    child.kill("SIGTERM");
+  }
+
+  if (child.exitCode == null && child.signalCode == null) {
+    await new Promise(resolve => child.once("exit", resolve));
+  }
 }
 
 assert.match(stdout, /codex-to-llm-server listening on/);
