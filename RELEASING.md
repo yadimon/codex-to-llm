@@ -21,7 +21,7 @@ Examples:
 
 ## First Publish
 
-Neither package exists on npm yet, so each package needs one manual bootstrap publish before npm Trusted Publishing can be configured.
+Each package needs one manual bootstrap publish before npm Trusted Publishing can be configured.
 
 Before the first publish:
 
@@ -83,8 +83,8 @@ npm version patch --workspace @yadimon/codex-to-llm --no-git-tag-version
 node -e "const fs=require('node:fs'); const p='packages/codex-to-llm-server/package.json'; const pkg=JSON.parse(fs.readFileSync(p,'utf8')); pkg.dependencies['@yadimon/codex-to-llm']='^<version>'; fs.writeFileSync(p, JSON.stringify(pkg, null, 2)+'\n');"
 git add package-lock.json packages/codex-to-llm/package.json packages/codex-to-llm-server/package.json
 git commit -m "release(codex-to-llm): <version>"
-git tag codex-to-llm-v<version>
-git push origin HEAD --follow-tags
+git tag -a codex-to-llm-v<version> -m "Release codex-to-llm-v<version>"
+git push origin HEAD codex-to-llm-v<version>
 ```
 
 Server package:
@@ -94,8 +94,8 @@ npm run check
 npm version patch --workspace @yadimon/codex-to-llm-server --no-git-tag-version
 git add package-lock.json packages/codex-to-llm-server/package.json
 git commit -m "release(codex-to-llm-server): <version>"
-git tag codex-to-llm-server-v<version>
-git push origin HEAD --follow-tags
+git tag -a codex-to-llm-server-v<version> -m "Release codex-to-llm-server-v<version>"
+git push origin HEAD codex-to-llm-server-v<version>
 ```
 
 ## Notes

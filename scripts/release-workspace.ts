@@ -90,8 +90,8 @@ function main(): void {
 
   runGit(["add", ...filesToAdd]);
   runGit(["commit", "-m", `release(${releaseTagPrefix}): ${version}`]);
-  runGit(["tag", tagName]);
-  runGit(["push", "origin", "HEAD", "--follow-tags"]);
+  runGit(["tag", "-a", tagName, "-m", `Release ${tagName}`]);
+  runGit(["push", "origin", "HEAD", tagName]);
 }
 
 function syncServerDependencyToCore(): void {
