@@ -36,8 +36,17 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Test
-        run: npm test
+      - name: Test core package
+        run: npm run test --workspace @yadimon/codex-to-llm
+
+      - name: Test server package
+        run: npm run test --workspace @yadimon/codex-to-llm-server
+
+      - name: Core e2e
+        run: npm run e2e --workspace @yadimon/codex-to-llm
+
+      - name: Server e2e
+        run: npm run e2e --workspace @yadimon/codex-to-llm-server
 
       - name: Build
         run: npm run build
