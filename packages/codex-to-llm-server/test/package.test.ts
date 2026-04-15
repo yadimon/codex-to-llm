@@ -7,7 +7,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package
 
 test("package.json exposes server dist entrypoints and workspace dependency", () => {
   assert.equal(packageJson.name, "@yadimon/codex-to-llm-server");
-  assert.equal(packageJson.bin["codex-to-llm-server"], "./dist/cli.js");
+  assert.equal(packageJson.bin["codex-to-llm-server"], "dist/cli.js");
   assert.equal(packageJson.main, "./dist/index.js");
   assert.equal(packageJson.types, "./dist/index.d.ts");
   assert.equal(packageJson.dependencies["@yadimon/codex-to-llm"], "^0.1.0");

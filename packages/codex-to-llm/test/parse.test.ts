@@ -22,3 +22,15 @@ test("parseCodexEvents extracts content and usage", () => {
   });
   assert.equal(parsed.events.length, 3);
 });
+
+test("parseCodexEvents ignores empty agent messages and concatenates multiple messages", () => {
+  const stdout = [
+    JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "" } }),
+    JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "First" } }),
+    JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "Second" } })
+  ].join("\n");
+
+  const parsed = parseCodexEvents(stdout);
+  assert.equal(parsed.content, "First\n\nSecond");
+  assert.equal(parsed.events.length, 3);
+});

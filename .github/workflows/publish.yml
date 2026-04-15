@@ -1,0 +1,100 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to publish manually
+        required: true
+        type: choice
+        options:
+          - codex-to-llm
+          - codex-to-llm-server
+  push:
+    tags:
+      - "codex-to-llm-v*"
+      - "codex-to-llm-server-v*"
+
+env:
+  NPM_CONFIG_PROVENANCE: true
+
+jobs:
+  publish-core:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.package == 'codex-to-llm' || startsWith(github.ref_name, 'codex-to-llm-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Update npm CLI for Trusted Publishing
+        run: npm install --global npm@latest
+
+      - name: Install
+        run: npm ci
+
+      - name: Verify tag matches core package version
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./packages/codex-to-llm/package.json').version")"
+          if [ "codex-to-llm-v${PACKAGE_VERSION}" != "${GITHUB_REF_NAME}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match packages/codex-to-llm/package.json version codex-to-llm-v${PACKAGE_VERSION}" >&2
+            exit 1
+          fi
+
+      - name: Verify repository
+        run: npm run check
+
+      - name: Publish core package to npm with Trusted Publishing
+        run: npm publish --workspace @yadimon/codex-to-llm
+
+  publish-server:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.package == 'codex-to-llm-server' || startsWith(github.ref_name, 'codex-to-llm-server-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Update npm CLI for Trusted Publishing
+        run: npm install --global npm@latest
+
+      - name: Install
+        run: npm ci
+
+      - name: Verify tag matches server package version
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./packages/codex-to-llm-server/package.json').version")"
+          if [ "codex-to-llm-server-v${PACKAGE_VERSION}" != "${GITHUB_REF_NAME}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match packages/codex-to-llm-server/package.json version codex-to-llm-server-v${PACKAGE_VERSION}" >&2
+            exit 1
+          fi
+
+      - name: Verify repository
+        run: npm run check
+
+      - name: Publish server package to npm with Trusted Publishing
+        run: npm publish --workspace @yadimon/codex-to-llm-server

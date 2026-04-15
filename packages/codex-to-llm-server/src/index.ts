@@ -272,10 +272,10 @@ function buildMockCoreResponse(
     createdAt: Math.floor(Date.now() / 1000),
     content,
     usage: {
-      inputTokens: normalizedInput.length,
+      inputTokens: Math.ceil(normalizedInput.length / 4),
       cachedInputTokens: 0,
-      outputTokens: content.length,
-      totalTokens: normalizedInput.length + content.length
+      outputTokens: Math.ceil(content.length / 4),
+      totalTokens: Math.ceil(normalizedInput.length / 4) + Math.ceil(content.length / 4)
     },
     raw: {
       stderr: "",
@@ -375,10 +375,11 @@ async function streamOpenAIResponse(
   response.setHeader("Connection", "keep-alive");
 
   let finalResponse;
+  let hasError = false;
 
   try {
     for await (const event of runner.streamResponse(coreInput, runOptions)) {
-      if (event.type === "response.started") {
+      if (event.type === "response.started" && event.response) {
         writeSse(response, "response.created", {
           id: event.response.id,
           model: event.response.model,
@@ -395,7 +396,7 @@ async function streamOpenAIResponse(
         continue;
       }
 
-      if (event.type === "response.completed") {
+      if (event.type === "response.completed" && event.response) {
         finalResponse = buildOpenAIResponse(event.response);
         writeSse(response, "response.output_text.done", {
           text: event.response.content
@@ -404,6 +405,7 @@ async function streamOpenAIResponse(
       }
     }
   } catch (error) {
+    hasError = true;
     writeSse(
       response,
       "response.failed",
@@ -411,7 +413,9 @@ async function streamOpenAIResponse(
     );
   }
 
-  response.write("data: [DONE]\n\n");
+  if (!hasError) {
+    response.write("data: [DONE]\n\n");
+  }
   response.end();
 
   return finalResponse;
@@ -419,9 +423,16 @@ async function streamOpenAIResponse(
 
 async function readJsonBody(request: IncomingMessage): Promise<ResponsesRequestBody> {
   const chunks: Buffer[] = [];
+  const maxBodySize = 10 * 1024 * 1024;
+  let totalSize = 0;
 
   for await (const chunk of request) {
-    chunks.push(Buffer.from(chunk));
+    const buffer = Buffer.from(chunk);
+    totalSize += buffer.length;
+    if (totalSize > maxBodySize) {
+      throw createHttpError(413, "Request body too large");
+    }
+    chunks.push(buffer);
   }
 
   const rawBody = Buffer.concat(chunks).toString("utf8").trim();

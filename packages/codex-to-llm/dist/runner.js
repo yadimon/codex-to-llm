@@ -41,12 +41,21 @@ export function streamResponse(input, options = {}) {
     const cliPath = options.cliPath || process.env.CODEX_TO_LLM_CLI_PATH || process.env.CODEX_CLI_PATH || "codex";
     assertCliPathExists(cliPath);
     const ownsWorkspace = !options.cwd;
-    const workspace = createWorkspace(options.cwd);
     const ownsCodexHome = !options.configHome;
-    const codexHome = createCodexHome({
-        authPath: options.authPath,
-        configHome: options.configHome
-    });
+    let workspace;
+    let codexHome;
+    try {
+        workspace = createWorkspace(options.cwd);
+        codexHome = createCodexHome({
+            authPath: options.authPath,
+            configHome: options.configHome
+        });
+    }
+    catch (error) {
+        cleanupDirectory(workspace, ownsWorkspace);
+        cleanupDirectory(codexHome, ownsCodexHome);
+        throw error;
+    }
     const responseId = options.responseId || `resp_${randomUUID().replace(/-/g, "")}`;
     const startedAt = Date.now();
     const queue = new AsyncQueue();
@@ -56,6 +65,7 @@ export function streamResponse(input, options = {}) {
     let stderr = "";
     let stdoutBuffer = "";
     let usage = createEmptyUsage();
+    const timeoutMs = options.timeout ?? 5 * 60 * 1000;
     const cliArgs = [
         "exec",
         "--json",
@@ -103,11 +113,17 @@ export function streamResponse(input, options = {}) {
         },
         windowsHide: true
     });
+    const timeoutHandle = setTimeout(() => {
+        if (!settled) {
+            finalizeFailure(new Error(`Codex execution timeout after ${timeoutMs}ms`));
+        }
+    }, timeoutMs);
     function finalizeSuccess() {
         if (settled) {
             return;
         }
         settled = true;
+        clearTimeout(timeoutHandle);
         flushStdoutBuffer();
         const response = {
             ...createResponseShell({
@@ -136,6 +152,10 @@ export function streamResponse(input, options = {}) {
             return;
         }
         settled = true;
+        clearTimeout(timeoutHandle);
+        if (!child.killed) {
+            child.kill();
+        }
         flushStdoutBuffer();
         cleanupDirectory(workspace, ownsWorkspace);
         cleanupDirectory(codexHome, ownsCodexHome);
@@ -166,16 +186,21 @@ export function streamResponse(input, options = {}) {
             event
         });
         if (isAgentMessageEvent(event)) {
-            content = event.item.text;
+            content = content ? `${content}\n\n${event.item.text}` : event.item.text;
             queue.push({
                 type: "response.output_text.delta",
                 delta: event.item.text
             });
         }
         if (event.type === "turn.completed" && "usage" in event) {
-            const eventUsage = event.usage;
-            if (eventUsage) {
-                usage = normalizeUsage(eventUsage);
+            try {
+                const eventUsage = event.usage;
+                if (typeof eventUsage === "object" && eventUsage !== null) {
+                    usage = normalizeUsage(eventUsage);
+                }
+            }
+            catch (error) {
+                stderr += `\n[WARNING] Failed to parse usage: ${error instanceof Error ? error.message : String(error)}`;
             }
         }
     }
@@ -190,18 +215,27 @@ export function streamResponse(input, options = {}) {
     child.stderr.on("data", chunk => {
         stderr += chunk.toString();
     });
+    child.stdin.on("error", error => {
+        finalizeFailure(error instanceof Error ? error : new Error(String(error)));
+    });
     child.on("error", error => {
         finalizeFailure(normalizeSpawnError(error, cliPath));
     });
     child.on("close", code => {
-        if (code && code !== 0) {
-            finalizeFailure(new Error(stderr.trim() || `Codex exited with code ${code}`));
-            return;
-        }
-        finalizeSuccess();
+        setImmediate(() => {
+            if (code && code !== 0) {
+                finalizeFailure(new Error(stderr.trim() || `Codex exited with code ${code}`));
+                return;
+            }
+            finalizeSuccess();
+        });
     });
-    child.stdin.write(prompt);
-    child.stdin.end();
+    try {
+        child.stdin.end(prompt);
+    }
+    catch (error) {
+        finalizeFailure(error instanceof Error ? error : new Error(String(error)));
+    }
     return queue;
 }
 export const execCodex = runResponse;

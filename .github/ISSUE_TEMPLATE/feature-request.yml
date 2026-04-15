@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest an improvement for one of the packages.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      options:
+        - "@yadimon/codex-to-llm"
+        - "@yadimon/codex-to-llm-server"
+        - "repository / release tooling"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+    validations:
+      required: true

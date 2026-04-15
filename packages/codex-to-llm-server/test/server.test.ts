@@ -296,3 +296,73 @@ test("server rejects models outside the configured list", async () => {
     await started.close();
   }
 });
+
+test("server does not send DONE after a streaming failure", async () => {
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    runner: {
+      async runResponse() {
+        throw new Error("not used");
+      },
+      async *streamResponse(): AsyncGenerator<StreamEvent> {
+        yield {
+          type: "response.started",
+          response: {
+            id: "resp_stream",
+            model: "gpt-5.3-codex-spark",
+            instructions: undefined,
+            messages: [],
+            createdAt: 1
+          }
+        };
+        throw new Error("stream failed");
+      }
+    }
+  });
+
+  try {
+    const response = await fetch(`${started.url}/v1/responses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        stream: true,
+        input: "Hello"
+      })
+    });
+    const text = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(text, /event: response.failed/);
+    assert.doesNotMatch(text, /data: \[DONE\]/);
+  } finally {
+    await started.close();
+  }
+});
+
+test("server rejects oversized request bodies", async () => {
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    runner: createStubRunner()
+  });
+
+  try {
+    const response = await fetch(`${started.url}/v1/responses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        input: "x".repeat(10 * 1024 * 1024 + 1)
+      })
+    });
+
+    assert.equal(response.status, 413);
+    assert.match(await response.text(), /Request body too large/);
+  } finally {
+    await started.close();
+  }
+});

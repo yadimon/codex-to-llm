@@ -12,7 +12,7 @@ export function parseCodexEvents(stdout) {
         }
         events.push(event);
         if (isAgentMessageEvent(event)) {
-            content = event.item.text;
+            content = content ? `${content}\n\n${event.item.text}` : event.item.text;
         }
         if (isTurnCompletedEvent(event) && event.usage) {
             usage = normalizeUsage(event.usage);
@@ -39,7 +39,8 @@ export function isAgentMessageEvent(event) {
         "type" in event.item &&
         event.item.type === "agent_message" &&
         "text" in event.item &&
-        typeof event.item.text === "string");
+        typeof event.item.text === "string" &&
+        event.item.text.length > 0);
 }
 export function createEmptyUsage() {
     return {

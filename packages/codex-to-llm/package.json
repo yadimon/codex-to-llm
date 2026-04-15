@@ -5,14 +5,25 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yadimon/codex-to-llm.git"
+  },
+  "homepage": "https://github.com/yadimon/codex-to-llm#readme",
+  "bugs": {
+    "url": "https://github.com/yadimon/codex-to-llm/issues"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
-    "codex-to-llm": "./dist/cli.js"
+    "codex-to-llm": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -25,6 +36,9 @@
     "build": "node --input-type=module --eval \"import fs from 'node:fs'; fs.rmSync('dist', { recursive: true, force: true });\" && tsc -p tsconfig.json",
     "e2e": "tsx ./scripts/e2e-cli.ts",
     "lint": "eslint src test scripts",
+    "pack": "npm pack --dry-run",
+    "pack:check": "npm run pack && publint",
+    "publish:dry-run": "npm publish --dry-run",
     "release:check": "tsx ./scripts/release-check.ts",
     "smoke:cli": "tsx ./src/cli.ts --prompt \"Hi\" --json --model gpt-5.3-codex-spark",
     "smoke:sdk": "tsx ./scripts/smoke-sdk.ts",

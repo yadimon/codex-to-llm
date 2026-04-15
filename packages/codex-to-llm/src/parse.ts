@@ -34,7 +34,7 @@ export function parseCodexEvents(stdout: string): ParsedCodexEvents {
     events.push(event);
 
     if (isAgentMessageEvent(event)) {
-      content = event.item.text;
+      content = content ? `${content}\n\n${event.item.text}` : event.item.text;
     }
 
     if (isTurnCompletedEvent(event) && event.usage) {
@@ -68,7 +68,8 @@ export function isAgentMessageEvent(
     "type" in event.item &&
     event.item.type === "agent_message" &&
     "text" in event.item &&
-    typeof event.item.text === "string"
+    typeof event.item.text === "string" &&
+    event.item.text.length > 0
   );
 }
 

@@ -34,6 +34,28 @@ npm run start:server
 npm run start:server:mock
 ```
 
+## Release flow
+
+This repository publishes two npm packages from one GitHub repository:
+
+- `@yadimon/codex-to-llm`
+- `@yadimon/codex-to-llm-server`
+
+They are versioned independently and released with package-specific tags:
+
+- `codex-to-llm-v<version>`
+- `codex-to-llm-server-v<version>`
+
+Maintainer commands:
+
+```bash
+npm run check
+npm run release:core:patch
+npm run release:server:patch
+```
+
+The full maintainer guide lives in `RELEASING.md`.
+
 ## Start the server
 
 ```bash

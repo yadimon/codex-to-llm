@@ -6,6 +6,7 @@ export interface RunOptions {
     model?: string;
     reasoningEffort?: string;
     maxTokens?: number;
+    timeout?: number;
     sandbox?: string;
     cliPath?: string;
     authPath?: string;
