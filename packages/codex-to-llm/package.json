@@ -1,6 +1,6 @@
 {
   "name": "@yadimon/codex-to-llm",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Minimal LLM-style SDK and CLI wrapper around codex exec",
   "type": "module",
   "main": "./dist/index.js",
