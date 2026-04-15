@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": ".tsbuildinfo.scripts"
+  },
+  "include": ["scripts/**/*.ts"]
+}

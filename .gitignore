@@ -6,3 +6,4 @@ packages/*/.npm-cache/
 .codex-minimal/
 tmp-auth/
 .idea/
+*.tsbuildinfo*

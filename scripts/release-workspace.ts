@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { npmCacheDir, repoRoot } from "./workspace-helpers.js";
 
 type BumpType = "patch" | "minor" | "major";
@@ -20,10 +20,14 @@ if (!workspaceName || !bumpType || !tagPrefix) {
   process.exit(1);
 }
 
+const releaseWorkspace = workspaceName;
+const releaseBumpType = bumpType;
+const releaseTagPrefix = tagPrefix;
+
 const workspacePackageJsonPath = path.join(
   repoRoot,
   "packages",
-  workspaceName.replace(/^@[^/]+\//, ""),
+  releaseWorkspace.replace(/^@[^/]+\//, ""),
   "package.json"
 );
 
@@ -66,16 +70,16 @@ function main(): void {
   }
 
   runNpm(["run", "check"]);
-  runNpm(["version", bumpType, "--workspace", workspaceName, "--no-git-tag-version"]);
+  runNpm(["version", releaseBumpType, "--workspace", releaseWorkspace, "--no-git-tag-version"]);
 
   const packageJson = JSON.parse(fs.readFileSync(workspacePackageJsonPath, "utf8")) as {
     version: string;
   };
   const version = packageJson.version;
-  const tagName = `${tagPrefix}-v${version}`;
+  const tagName = `${releaseTagPrefix}-v${version}`;
 
   runGit(["add", "package-lock.json", workspacePackageJsonPath]);
-  runGit(["commit", "-m", `release(${tagPrefix}): ${version}`]);
+  runGit(["commit", "-m", `release(${releaseTagPrefix}): ${version}`]);
   runGit(["tag", tagName]);
   runGit(["push", "origin", "HEAD", "--follow-tags"]);
 }

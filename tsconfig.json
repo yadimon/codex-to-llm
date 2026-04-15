@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "./tsconfig.scripts.json" },
     { "path": "./packages/codex-to-llm" },
     { "path": "./packages/codex-to-llm-server" }
   ]

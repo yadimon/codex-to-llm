@@ -1,4 +1,4 @@
-import path from "node:path";
+import * as path from "node:path";
 export function quoteCmdArg(arg) {
     if (arg.length === 0) {
         return "\"\"";

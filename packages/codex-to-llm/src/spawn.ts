@@ -1,4 +1,4 @@
-import path from "node:path";
+import * as path from "node:path";
 import type { SpawnResolution } from "./types.js";
 
 export function quoteCmdArg(arg: string): string {

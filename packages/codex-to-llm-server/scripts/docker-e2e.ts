@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import net from "node:net";
-import path from "node:path";
-import process from "node:process";
+import * as net from "node:net";
+import * as path from "node:path";
+import * as process from "node:process";
 
 const packageRoot = process.cwd();
 const repoRoot = path.resolve(packageRoot, "..", "..");
