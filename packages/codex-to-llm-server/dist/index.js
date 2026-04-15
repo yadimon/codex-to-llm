@@ -12,6 +12,7 @@ const UNSUPPORTED_REQUEST_FIELDS = [
     "input_image",
     "parallel_tool_calls"
 ];
+const VALID_REASONING_EFFORTS = new Set(["low", "medium", "high"]);
 export function createServer(options = {}) {
     const host = options.host || process.env.CODEX_TO_LLM_SERVER_HOST || DEFAULT_HOST;
     const port = options.port ?? Number(process.env.CODEX_TO_LLM_SERVER_PORT || DEFAULT_PORT);
@@ -148,6 +149,12 @@ function createMockRunner(options) {
         },
         async *streamResponse(input, requestOptions = {}) {
             const response = buildMockCoreResponse(input, requestOptions, options);
+            for (const event of response.raw.events) {
+                yield {
+                    type: "response.raw_event",
+                    event
+                };
+            }
             yield {
                 type: "response.started",
                 response: {
@@ -182,6 +189,22 @@ function buildMockCoreResponse(input, requestOptions, options) {
         : "";
     const inputTokens = Math.ceil(normalizedInput.length / 4);
     const outputTokens = Math.ceil(content.length / 4);
+    const rawEvents = [
+        {
+            type: "agent_message_delta",
+            item: {
+                text: content
+            }
+        },
+        {
+            type: "turn.completed",
+            usage: {
+                input_tokens: inputTokens,
+                cached_input_tokens: 0,
+                output_tokens: outputTokens
+            }
+        }
+    ];
     return {
         id: `resp_mock_${randomUUID().replace(/-/g, "")}`,
         model,
@@ -202,7 +225,7 @@ function buildMockCoreResponse(input, requestOptions, options) {
         },
         raw: {
             stderr: "",
-            events: []
+            events: rawEvents
         }
     };
 }
@@ -264,11 +287,29 @@ function requestToCoreInput(body) {
     };
 }
 function requestToRunOptions(body, options) {
+    validateReasoningEffort(body.reasoning?.effort);
+    validateMaxOutputTokens(body.max_output_tokens);
     return {
         model: body.model || options.defaultModel || process.env.CODEX_TO_LLM_SERVER_DEFAULT_MODEL || DEFAULT_MODEL,
         maxTokens: body.max_output_tokens ?? undefined,
         reasoningEffort: body.reasoning?.effort ?? undefined
     };
+}
+function validateReasoningEffort(effort) {
+    if (effort == null) {
+        return;
+    }
+    if (!VALID_REASONING_EFFORTS.has(effort)) {
+        throw createHttpError(400, "Invalid reasoning.effort");
+    }
+}
+function validateMaxOutputTokens(maxOutputTokens) {
+    if (maxOutputTokens == null) {
+        return;
+    }
+    if (!Number.isInteger(maxOutputTokens) || maxOutputTokens <= 0) {
+        throw createHttpError(400, "Invalid max_output_tokens");
+    }
 }
 async function streamOpenAIResponse(response, runner, coreInput, runOptions) {
     response.statusCode = 200;

@@ -63,6 +63,7 @@ type ServerCoreInput = {
   instructions?: string;
   input?: string | ConversationMessageInput[];
 };
+const VALID_REASONING_EFFORTS = new Set(["low", "medium", "high"]);
 
 export function createServer(options: ServerOptions = {}) {
   const host = options.host || process.env.CODEX_TO_LLM_SERVER_HOST || DEFAULT_HOST;
@@ -220,6 +221,12 @@ function createMockRunner(options: ServerOptions): Runner {
     },
     async *streamResponse(input, requestOptions = {}) {
       const response = buildMockCoreResponse(input, requestOptions, options);
+      for (const event of response.raw.events) {
+        yield {
+          type: "response.raw_event",
+          event
+        } satisfies StreamEvent;
+      }
       yield {
         type: "response.started",
         response: {
@@ -260,6 +267,22 @@ function buildMockCoreResponse(
     : "";
   const inputTokens = Math.ceil(normalizedInput.length / 4);
   const outputTokens = Math.ceil(content.length / 4);
+  const rawEvents = [
+    {
+      type: "agent_message_delta",
+      item: {
+        text: content
+      }
+    },
+    {
+      type: "turn.completed",
+      usage: {
+        input_tokens: inputTokens,
+        cached_input_tokens: 0,
+        output_tokens: outputTokens
+      }
+    }
+  ];
 
   return {
     id: `resp_mock_${randomUUID().replace(/-/g, "")}`,
@@ -281,7 +304,7 @@ function buildMockCoreResponse(
     },
     raw: {
       stderr: "",
-      events: []
+      events: rawEvents
     }
   };
 }
@@ -358,11 +381,34 @@ function requestToCoreInput(body: ResponsesRequestBody): ServerCoreInput {
 }
 
 function requestToRunOptions(body: ResponsesRequestBody, options: ServerOptions): RunOptions {
+  validateReasoningEffort(body.reasoning?.effort);
+  validateMaxOutputTokens(body.max_output_tokens);
+
   return {
     model: body.model || options.defaultModel || process.env.CODEX_TO_LLM_SERVER_DEFAULT_MODEL || DEFAULT_MODEL,
     maxTokens: body.max_output_tokens ?? undefined,
     reasoningEffort: body.reasoning?.effort ?? undefined
   };
+}
+
+function validateReasoningEffort(effort: string | undefined): void {
+  if (effort == null) {
+    return;
+  }
+
+  if (!VALID_REASONING_EFFORTS.has(effort)) {
+    throw createHttpError(400, "Invalid reasoning.effort");
+  }
+}
+
+function validateMaxOutputTokens(maxOutputTokens: number | undefined): void {
+  if (maxOutputTokens == null) {
+    return;
+  }
+
+  if (!Number.isInteger(maxOutputTokens) || maxOutputTokens <= 0) {
+    throw createHttpError(400, "Invalid max_output_tokens");
+  }
 }
 
 async function streamOpenAIResponse(

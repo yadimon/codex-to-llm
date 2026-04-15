@@ -41,9 +41,10 @@ export async function main(): Promise<void> {
   }
 
   const portArg = getArg("--port");
+  const port = parsePort(portArg);
   const started = await startServer({
     host: getArg("--host"),
-    port: portArg ? Number.parseInt(portArg, 10) : undefined,
+    port,
     defaultModel: getArg("--model"),
     apiKey: getArg("--api-key"),
     authPath: getArg("--auth-path"),
@@ -53,6 +54,19 @@ export async function main(): Promise<void> {
   });
 
   console.log(`codex-to-llm-server listening on ${started.url}`);
+}
+
+function parsePort(portArg: string | undefined): number | undefined {
+  if (portArg == null) {
+    return undefined;
+  }
+
+  const port = Number.parseInt(portArg, 10);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new Error("Invalid --port: expected an integer between 0 and 65535");
+  }
+
+  return port;
 }
 
 const modulePath = fs.realpathSync.native(fileURLToPath(import.meta.url));

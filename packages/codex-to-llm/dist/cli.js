@@ -54,18 +54,18 @@ async function readCliInput() {
     }
     const inputJson = getArg("--input-json");
     if (inputJson) {
-        return JSON.parse(inputJson);
+        return parseJsonInput(inputJson, "--input-json");
     }
     const inputFile = getArg("--input-file");
     if (inputFile) {
-        return JSON.parse(fs.readFileSync(inputFile, "utf8"));
+        return parseJsonInput(fs.readFileSync(inputFile, "utf8"), "--input-file");
     }
     const stdinText = await readStdin();
     if (!stdinText) {
         throw new Error("Prompt or JSON input is required");
     }
     if (hasFlag("--stdin-json")) {
-        return JSON.parse(stdinText);
+        return parseJsonInput(stdinText, "--stdin-json");
     }
     return stdinText;
 }
@@ -81,6 +81,14 @@ function buildRunOptions() {
         cwd: getArg("--cwd"),
         cliPath: getArg("--cli")
     };
+}
+function parseJsonInput(raw, source) {
+    try {
+        return JSON.parse(raw);
+    }
+    catch {
+        throw new Error(`Invalid JSON for ${source}`);
+    }
 }
 export async function main() {
     if (hasFlag("--help") || hasFlag("-h")) {

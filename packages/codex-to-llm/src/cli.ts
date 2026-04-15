@@ -66,12 +66,12 @@ async function readCliInput(): Promise<ConversationInput> {
 
   const inputJson = getArg("--input-json");
   if (inputJson) {
-    return JSON.parse(inputJson) as ConversationInput;
+    return parseJsonInput(inputJson, "--input-json");
   }
 
   const inputFile = getArg("--input-file");
   if (inputFile) {
-    return JSON.parse(fs.readFileSync(inputFile, "utf8")) as ConversationInput;
+    return parseJsonInput(fs.readFileSync(inputFile, "utf8"), "--input-file");
   }
 
   const stdinText = await readStdin();
@@ -80,7 +80,7 @@ async function readCliInput(): Promise<ConversationInput> {
   }
 
   if (hasFlag("--stdin-json")) {
-    return JSON.parse(stdinText) as ConversationInput;
+    return parseJsonInput(stdinText, "--stdin-json");
   }
 
   return stdinText;
@@ -98,6 +98,14 @@ function buildRunOptions(): RunOptions {
     cwd: getArg("--cwd"),
     cliPath: getArg("--cli")
   };
+}
+
+function parseJsonInput(raw: string, source: "--input-json" | "--input-file" | "--stdin-json"): ConversationInput {
+  try {
+    return JSON.parse(raw) as ConversationInput;
+  } catch {
+    throw new Error(`Invalid JSON for ${source}`);
+  }
 }
 
 export async function main(): Promise<void> {

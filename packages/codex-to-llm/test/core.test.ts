@@ -99,6 +99,17 @@ test("normalizeRunOptions rejects invalid timeout values", () => {
   assert.equal(normalizeRunOptions({ timeout: 1500.9 }).timeoutMs, 1500);
 });
 
+test("normalizeRunOptions rejects invalid maxTokens values", () => {
+  assert.throws(
+    () => normalizeRunOptions({ maxTokens: -1 }),
+    /Invalid maxTokens/
+  );
+  assert.throws(
+    () => normalizeRunOptions({ maxTokens: 1.5 }),
+    /Invalid maxTokens/
+  );
+});
+
 test("normalizeSpawnError provides targeted permission errors", () => {
   const error = normalizeSpawnError({ code: "EACCES" }, "codex");
 

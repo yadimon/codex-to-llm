@@ -50,9 +50,10 @@ export function streamResponse(input, options = {}) {
         });
     }
     catch (error) {
-        cleanupDirectory(workspace, ownsWorkspace);
-        cleanupDirectory(codexHome, ownsCodexHome);
-        throw error;
+        throw withCleanupPreserved(error, [
+            () => cleanupDirectory(workspace, ownsWorkspace),
+            () => cleanupDirectory(codexHome, ownsCodexHome)
+        ]);
     }
     const responseId = options.responseId || `resp_${randomUUID().replace(/-/g, "")}`;
     const startedAt = Date.now();
@@ -243,7 +244,7 @@ export function normalizeRunOptions(options = {}) {
     return {
         model: normalizeCliToken(options.model, DEFAULT_MODEL, "model"),
         reasoningEffort: normalizeCliToken(options.reasoningEffort, DEFAULT_REASONING_EFFORT, "reasoning effort"),
-        maxTokens: Number.isFinite(options.maxTokens) ? Number(options.maxTokens) : DEFAULT_MAX_TOKENS,
+        maxTokens: normalizeMaxTokens(options.maxTokens),
         sandbox: normalizeCliToken(options.sandbox, DEFAULT_SANDBOX, "sandbox"),
         timeoutMs: normalizeTimeout(options.timeout)
     };
@@ -264,6 +265,15 @@ function normalizeTimeout(value) {
     }
     return Math.floor(value);
 }
+function normalizeMaxTokens(value) {
+    if (value == null) {
+        return DEFAULT_MAX_TOKENS;
+    }
+    if (!Number.isInteger(value) || value <= 0) {
+        throw new Error("Invalid maxTokens: expected a positive integer");
+    }
+    return value;
+}
 function appendBounded(current, nextChunk) {
     const combined = current + nextChunk;
     if (combined.length <= MAX_STDERR_LENGTH) {
@@ -271,6 +281,18 @@ function appendBounded(current, nextChunk) {
     }
     const tailLength = MAX_STDERR_LENGTH - "\n[stderr truncated]".length;
     return `${combined.slice(-tailLength)}\n[stderr truncated]`;
+}
+function withCleanupPreserved(error, cleanupTasks) {
+    const originalError = error instanceof Error ? error : new Error(String(error));
+    for (const cleanupTask of cleanupTasks) {
+        try {
+            cleanupTask();
+        }
+        catch (cleanupError) {
+            originalError.message = `${originalError.message} (cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)})`;
+        }
+    }
+    return originalError;
 }
 function createResponseShell({ responseId, model, normalizedInput, startedAt }) {
     return {

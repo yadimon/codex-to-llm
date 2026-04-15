@@ -270,6 +270,64 @@ test("server forwards max_output_tokens and reasoning effort to the runner", asy
   }
 });
 
+test("server rejects invalid reasoning effort with 400", async () => {
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    models: ["gpt-5.3-codex-spark"],
+    runner: createStubRunner()
+  });
+
+  try {
+    const response = await fetch(`${started.url}/v1/responses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-5.3-codex-spark",
+        input: "Hello",
+        reasoning: {
+          effort: "extreme"
+        }
+      })
+    });
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /Invalid reasoning\.effort/);
+  } finally {
+    await started.close();
+  }
+});
+
+test("server rejects invalid max_output_tokens with 400", async () => {
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    models: ["gpt-5.3-codex-spark"],
+    runner: createStubRunner()
+  });
+
+  try {
+    const response = await fetch(`${started.url}/v1/responses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-5.3-codex-spark",
+        input: "Hello",
+        max_output_tokens: -100
+      })
+    });
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /Invalid max_output_tokens/);
+  } finally {
+    await started.close();
+  }
+});
+
 test("server rejects models outside the configured list", async () => {
   const started = await startServer({
     host: "127.0.0.1",
@@ -341,6 +399,7 @@ test("server does not send DONE after a streaming failure", async () => {
     await started.close();
   }
 });
+
 
 test("server rejects oversized request bodies", async () => {
   const started = await startServer({
