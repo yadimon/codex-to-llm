@@ -24,7 +24,7 @@
     "release:server:patch": "tsx ./scripts/release-workspace.ts @yadimon/codex-to-llm-server patch codex-to-llm-server",
     "release:server:minor": "tsx ./scripts/release-workspace.ts @yadimon/codex-to-llm-server minor codex-to-llm-server",
     "release:server:major": "tsx ./scripts/release-workspace.ts @yadimon/codex-to-llm-server major codex-to-llm-server",
-    "test": "tsx ./scripts/run-workspace-tests.ts",
+    "test": "tsx ./scripts/run-root-node-tests.ts && tsx ./scripts/run-workspace-tests.ts",
     "test:docker": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server test:docker",
     "test:all": "tsx ./scripts/run-workspace-tests.ts && tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server test:docker",
     "smoke:core": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm smoke:sdk",
