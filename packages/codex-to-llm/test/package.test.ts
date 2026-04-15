@@ -10,6 +10,8 @@ test("package.json exposes dist entrypoints and release checks", () => {
   assert.equal(packageJson.bin["codex-to-llm"], "dist/cli.js");
   assert.equal(packageJson.main, "./dist/index.js");
   assert.equal(packageJson.types, "./dist/index.d.ts");
+  assert.match(packageJson.scripts.build, /maxRetries: 10/);
+  assert.match(packageJson.scripts.build, /retryDelay: 50/);
   assert.equal(packageJson.scripts.test, "tsx ./scripts/run-node-tests.ts");
   assert.equal(packageJson.scripts.e2e, "tsx ./scripts/e2e-cli.ts");
   assert.equal(packageJson.scripts.prepack, "npm run test && npm run build");

@@ -13,6 +13,8 @@ test("package.json exposes server dist entrypoints and workspace dependency", ()
   assert.equal(packageJson.bin["codex-to-llm-server"], "dist/cli.js");
   assert.equal(packageJson.main, "./dist/index.js");
   assert.equal(packageJson.types, "./dist/index.d.ts");
+  assert.match(packageJson.scripts.build, /maxRetries: 10/);
+  assert.match(packageJson.scripts.build, /retryDelay: 50/);
   assert.equal(packageJson.dependencies["@yadimon/codex-to-llm"], `^${corePackageJson.version}`);
   assert.equal(packageJson.scripts.e2e, "tsx ./scripts/e2e-server.ts");
   assert.equal(packageJson.scripts["start:mock"], "tsx ./scripts/start-mock-server.ts");
