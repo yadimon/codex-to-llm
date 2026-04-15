@@ -46,7 +46,7 @@ After both packages exist on npm, add a Trusted Publisher for each package in np
 - workflow filename: `publish.yml`
 - environment: none
 
-The publish workflow uses GitHub Actions OIDC with a current Node runtime and updates npm before publishing.
+The publish workflow uses GitHub Actions OIDC with the npm version bundled with the selected Node runtime.
 
 ## Normal Release Flow
 
