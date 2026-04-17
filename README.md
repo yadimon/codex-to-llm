@@ -1,11 +1,14 @@
-# codex-to-llm workspace
+# codex-to-llm
 
-Monorepo for a minimal Codex-backed LLM adapter and an OpenAI-compatible HTTP server on top of it.
+Monorepo for two npm packages built around the Codex CLI:
 
-## Packages
+- `@yadimon/codex-to-llm`: SDK and CLI wrapper around `codex exec`
+- `@yadimon/codex-to-llm-server`: OpenAI-compatible `/v1/responses` server built on top of the core package
 
-- `@yadimon/codex-to-llm`: SDK and CLI for prompt and chat-style Codex execution
-- `@yadimon/codex-to-llm-server`: OpenAI-compatible Responses server package built on top of the core adapter
+The package-level READMEs are the npm-facing docs:
+
+- [`packages/codex-to-llm/README.md`](./packages/codex-to-llm/README.md)
+- [`packages/codex-to-llm-server/README.md`](./packages/codex-to-llm-server/README.md)
 
 ## Requirements
 
@@ -13,7 +16,7 @@ Monorepo for a minimal Codex-backed LLM adapter and an OpenAI-compatible HTTP se
 - installed `codex` CLI in `PATH`
 - valid Codex auth in `~/.codex/auth.json` or `CODEX_TO_LLM_AUTH_PATH`
 
-## Workspace commands
+## Workspace Development
 
 ```bash
 npm install
@@ -21,11 +24,9 @@ npm run build
 npm run lint
 npm run typecheck
 npm test
-npm run test:docker
-npm run release:check
 ```
 
-Useful smoke commands:
+Useful local commands:
 
 ```bash
 npm run smoke:core
@@ -34,69 +35,62 @@ npm run start:server
 npm run start:server:mock
 ```
 
-## Release flow
+## Package Layout
 
-This repository publishes two npm packages from one GitHub repository:
+```text
+packages/codex-to-llm
+  core SDK, CLI, and process runner
+
+packages/codex-to-llm-server
+  HTTP adapter exposing /healthz, /v1/models, and /v1/responses
+
+scripts
+  workspace test, pack, and release helpers
+```
+
+## Release Flow
+
+This repository publishes two independent npm packages:
 
 - `@yadimon/codex-to-llm`
 - `@yadimon/codex-to-llm-server`
 
-They are versioned independently and released with package-specific tags:
+They are versioned separately and released with package-specific tags:
 
 - `codex-to-llm-v<version>`
 - `codex-to-llm-server-v<version>`
 
-Maintainer commands:
+Pre-release verification:
 
 ```bash
 npm run check
+npm run release:check
+```
+
+Release commands:
+
+```bash
 npm run release:core:patch
+npm run release:core:minor
+npm run release:core:major
+
 npm run release:server:patch
+npm run release:server:minor
+npm run release:server:major
 ```
 
-The full maintainer guide lives in `RELEASING.md`.
-
-## Start the server
-
-```bash
-npm run start --workspace @yadimon/codex-to-llm-server
-```
-
-Then call:
-
-```bash
-curl http://127.0.0.1:3000/healthz
-curl http://127.0.0.1:3000/v1/models
-```
-
-## Environment variables
-
-| Variable | Default | Package | Description |
-|---|---|---|---|
-| `CODEX_TO_LLM_AUTH_PATH` | `~/.codex/auth.json` | core | Path to the Codex `auth.json` file. |
-| `CODEX_TO_LLM_CLI_PATH` | `codex` | core | Path to the Codex CLI binary. |
-| `CODEX_TO_LLM_LOCAL_HOME` | `.codex-to-llm/` | core | Local directory used by `auth:copy`. |
-| `CODEX_MIN_AUTH_PATH` | - | core | Backward-compatible alias for `CODEX_TO_LLM_AUTH_PATH`. |
-| `CODEX_MIN_LOCAL_HOME` | - | core | Backward-compatible alias for `CODEX_TO_LLM_LOCAL_HOME`. |
-| `CODEX_TO_LLM_REASONING_EFFORT` | `low` | core | Default reasoning effort forwarded to `codex exec`. |
-| `CODEX_TO_LLM_SANDBOX` | `read-only` | core | Sandbox mode passed to `codex exec`. |
-| `CODEX_TO_LLM_CONFIG_HOME` | temp dir | core | Temporary Codex config directory for a run. |
-| `CODEX_TO_LLM_WORKSPACE` | temp dir | core | Workspace directory passed with `-C`. |
-| `CODEX_TO_LLM_SERVER_HOST` | `127.0.0.1` | server | HTTP bind host. |
-| `CODEX_TO_LLM_SERVER_PORT` | `3000` | server | HTTP bind port. |
-| `CODEX_TO_LLM_SERVER_MODELS` | default model | server | Comma-separated allowlist of accepted models. |
-| `CODEX_TO_LLM_SERVER_DEFAULT_MODEL` | `gpt-5.3-codex-spark` | server | Fallback model used when the request omits `model`. |
-| `COMPAT_API_KEY` | - | server | Bearer token accepted for `/v1/responses`. |
-| `CODEX_TO_LLM_SERVER_API_KEY` | - | server | Alternate bearer token env var for `/v1/responses`. |
-| `CODEX_TO_LLM_SERVER_MOCK_MODE` | - | server | Enables the mock runner for local testing. |
-| `CODEX_TO_LLM_SERVER_MOCK_RESPONSE` | `mock response` | server | Mock response text returned by the mock runner. |
+The detailed maintainer workflow lives in `RELEASING.md`.
 
 ## Docker
 
-Build from the repository root:
+Build the server image from the repository root:
 
 ```bash
 docker build -f packages/codex-to-llm-server/Dockerfile .
 ```
 
-The container expects Codex auth at runtime, for example via a mounted auth file and `CODEX_TO_LLM_AUTH_PATH`.
+Run the Docker verification path with:
+
+```bash
+npm run test:docker
+```

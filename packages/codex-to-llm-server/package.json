@@ -1,7 +1,7 @@
 {
   "name": "@yadimon/codex-to-llm-server",
   "version": "0.1.1",
-  "description": "OpenAI-compatible Responses server on top of @yadimon/codex-to-llm",
+  "description": "Use Codex as a simple OpenAI-compatible Responses server",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -33,7 +33,7 @@
     "Dockerfile"
   ],
   "scripts": {
-    "build": "node --input-type=module --eval \"import fs from 'node:fs'; fs.rmSync('dist', { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });\" && tsc -p tsconfig.json",
+    "build": "node --input-type=module --eval \"import fs from 'node:fs'; fs.rmSync('dist', { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });\" && tsc -b tsconfig.json",
     "e2e": "tsx ./scripts/e2e-server.ts",
     "lint": "eslint src test scripts",
     "pack": "npm pack --dry-run",
