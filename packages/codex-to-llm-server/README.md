@@ -71,7 +71,7 @@ npm run start:mock --workspace @yadimon/codex-to-llm-server
 
 ## Authentication
 
-If you set `COMPAT_API_KEY` or `CODEX_TO_LLM_SERVER_API_KEY`, only `POST /v1/responses` requires a bearer token. `GET /healthz` and `GET /v1/models` stay public.
+If you set `CODEX_TO_LLM_SERVER_API_KEY`, only `POST /v1/responses` requires a bearer token. `GET /healthz` and `GET /v1/models` stay public.
 
 Example:
 
@@ -93,8 +93,7 @@ curl http://127.0.0.1:3000/v1/responses \
 | `CODEX_TO_LLM_SERVER_PORT` | `3000` | HTTP bind port. |
 | `CODEX_TO_LLM_SERVER_DEFAULT_MODEL` | `gpt-5.3-codex-spark` | Fallback model when the request omits `model`. |
 | `CODEX_TO_LLM_SERVER_MODELS` | default model | Comma-separated allowlist of accepted models. |
-| `COMPAT_API_KEY` | - | Bearer token accepted for `POST /v1/responses`. |
-| `CODEX_TO_LLM_SERVER_API_KEY` | - | Alternate env var for the same bearer token. |
+| `CODEX_TO_LLM_SERVER_API_KEY` | - | Bearer token accepted for `POST /v1/responses`. |
 | `CODEX_TO_LLM_SERVER_MOCK_MODE` | - | Enables the mock runner for local testing. |
 | `CODEX_TO_LLM_SERVER_MOCK_RESPONSE` | `mock response` | Mock response text returned by the mock runner. |
 | `CODEX_TO_LLM_AUTH_PATH` | `~/.codex/auth.json` | Path to the Codex auth file. |

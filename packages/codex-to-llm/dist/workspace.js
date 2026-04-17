@@ -9,10 +9,7 @@ export function resolveDefaultAuthPath() {
     return path.join(home, ".codex", "auth.json");
 }
 export function resolveAuthPath(explicitPath) {
-    return (explicitPath ||
-        process.env.CODEX_TO_LLM_AUTH_PATH ||
-        process.env.CODEX_MIN_AUTH_PATH ||
-        resolveDefaultAuthPath());
+    return explicitPath || process.env.CODEX_TO_LLM_AUTH_PATH || resolveDefaultAuthPath();
 }
 export function prepareAuthCopy(options = {}) {
     const authPath = resolveAuthPath(options.authPath);
@@ -22,10 +19,7 @@ export function prepareAuthCopy(options = {}) {
     const explicitTargetPath = options.targetPath;
     const targetDir = explicitTargetPath
         ? path.dirname(explicitTargetPath)
-        : options.targetDir ||
-            process.env.CODEX_TO_LLM_LOCAL_HOME ||
-            process.env.CODEX_MIN_LOCAL_HOME ||
-            path.join(process.cwd(), ".codex-to-llm");
+        : options.targetDir || process.env.CODEX_TO_LLM_LOCAL_HOME || path.join(process.cwd(), ".codex-to-llm");
     fs.mkdirSync(targetDir, { recursive: true });
     const targetAuth = explicitTargetPath || path.join(targetDir, "auth.json");
     fs.copyFileSync(authPath, targetAuth);

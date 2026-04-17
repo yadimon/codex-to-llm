@@ -93,8 +93,6 @@ Supported CLI options:
 | `CODEX_TO_LLM_CONFIG_HOME` | temp dir | Temporary Codex config directory for a run. |
 | `CODEX_TO_LLM_WORKSPACE` | temp dir | Workspace directory passed to Codex. |
 | `CODEX_TO_LLM_LOCAL_HOME` | `.codex-to-llm/` | Local directory used by the auth copy helper. |
-| `CODEX_MIN_AUTH_PATH` | - | Backward-compatible alias for `CODEX_TO_LLM_AUTH_PATH`. |
-| `CODEX_MIN_LOCAL_HOME` | - | Backward-compatible alias for `CODEX_TO_LLM_LOCAL_HOME`. |
 
 ## Development
 

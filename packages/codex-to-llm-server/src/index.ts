@@ -70,7 +70,7 @@ export function createServer(options: ServerOptions = {}) {
   const port = normalizeServerPort(options.port ?? process.env.CODEX_TO_LLM_SERVER_PORT ?? DEFAULT_PORT);
   const runner = options.runner || createDefaultRunner(options);
   const models = resolveModels(options);
-  const apiKey = options.apiKey || process.env.COMPAT_API_KEY || process.env.CODEX_TO_LLM_SERVER_API_KEY;
+  const apiKey = options.apiKey || process.env.CODEX_TO_LLM_SERVER_API_KEY;
 
   const server = createHttpServer(async (request, response) => {
     try {
