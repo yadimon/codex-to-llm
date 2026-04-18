@@ -1,6 +1,6 @@
 # @yadimon/codex-to-llm
 
-SDK and CLI wrapper around `codex exec` for single-turn and chat-style requests.
+Minimal SDK and CLI wrapper around `codex exec` for raw prompt requests.
 
 ## Install
 
@@ -16,23 +16,16 @@ Requirements:
 
 ## What It Provides
 
-- a small SDK for single-turn and chat-style requests
-- a CLI for prompt mode or JSON chat input
+- a small SDK for raw prompt execution with minimal prompt overhead
+- a CLI for direct prompt mode from flags, files, or stdin
 - structured streaming events for adapters such as HTTP compatibility servers
 
 ## SDK
 
 ```ts
-import { runResponse, type ConversationInput } from "@yadimon/codex-to-llm";
+import { runPrompt } from "@yadimon/codex-to-llm";
 
-const input: ConversationInput = {
-  instructions: "Answer briefly.",
-  messages: [
-    { role: "user", content: "Hello" }
-  ]
-};
-
-const result = await runResponse(input, {
+const result = await runPrompt("Hello", {
   model: "gpt-5.3-codex-spark",
   maxTokens: 128
 });
@@ -44,9 +37,9 @@ console.log(result.usage);
 For streamed events:
 
 ```ts
-import { streamResponse } from "@yadimon/codex-to-llm";
+import { streamPrompt } from "@yadimon/codex-to-llm";
 
-for await (const event of streamResponse("Hello", {
+for await (const event of streamPrompt("Hello", {
   model: "gpt-5.3-codex-spark"
 })) {
   if (event.type === "response.output_text.delta") {
@@ -59,17 +52,15 @@ for await (const event of streamResponse("Hello", {
 
 ```bash
 codex-to-llm --prompt "Hello"
-codex-to-llm --input-file ./chat.json --json
-cat ./chat.json | codex-to-llm --stdin-json --stream --json
+codex-to-llm --input-file ./prompt.txt --json
+cat ./prompt.txt | codex-to-llm --stream --json
 ```
 
 Supported CLI options:
 
 ```text
 --prompt <text>
---input-json <json>
 --input-file <path>
---stdin-json
 --stream
 --json
 --model <name>

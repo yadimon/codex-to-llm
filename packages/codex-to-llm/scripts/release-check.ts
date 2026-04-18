@@ -55,7 +55,7 @@ function main(): void {
       [
         "--input-type=module",
         "--eval",
-        'const mod = await import("@yadimon/codex-to-llm"); if (typeof mod.runResponse !== "function") throw new Error("missing runResponse");'
+        'const mod = await import("@yadimon/codex-to-llm"); if (typeof mod.runPrompt !== "function") throw new Error("missing runPrompt");'
       ],
       {
         cwd: consumerDir,

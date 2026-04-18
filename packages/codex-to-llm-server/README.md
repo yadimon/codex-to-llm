@@ -1,6 +1,6 @@
 # @yadimon/codex-to-llm-server
 
-OpenAI-compatible Responses server on top of `@yadimon/codex-to-llm`.
+OpenAI-compatible Responses server on top of the raw prompt core in `@yadimon/codex-to-llm`.
 
 ## Install
 
@@ -109,6 +109,7 @@ curl http://127.0.0.1:3000/v1/responses \
 - `POST /v1/responses` validates requested models against `CODEX_TO_LLM_SERVER_MODELS`
 - `max_output_tokens` and `reasoning.effort` are forwarded to the core runner
 - unsupported request fields such as `tools`, `tool_choice`, or `input_image` return `400`
+- the server owns prompt adaptation for `instructions` and multi-message dialog input before calling the raw core runner
 
 ## Docker
 

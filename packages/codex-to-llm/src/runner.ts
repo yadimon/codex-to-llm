@@ -1,10 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { normalizeConversationInput } from "./normalize.js";
 import { createEmptyUsage, isAgentMessageEvent, normalizeUsage, parseCodexEventLine } from "./parse.js";
 import { assertCliPathExists, normalizeSpawnError } from "./platform.js";
 import { AsyncQueue } from "./queue.js";
-import { serializeConversationInput } from "./serialize.js";
 import { resolveSpawn } from "./spawn.js";
 import {
   createCodexHome,
@@ -18,7 +16,6 @@ import {
   DEFAULT_SANDBOX
 } from "./types.js";
 import type {
-  ConversationInput,
   CoreResponse,
   NormalizedRunOptions,
   ResponseShell,
@@ -30,17 +27,17 @@ import type {
 
 export function createRunner(baseOptions: RunOptions = {}): Runner {
   return {
-    runResponse(input, options = {}) {
-      return runResponse(input, { ...baseOptions, ...options });
+    runPrompt(prompt, options = {}) {
+      return runPrompt(prompt, { ...baseOptions, ...options });
     },
-    streamResponse(input, options = {}) {
-      return streamResponse(input, { ...baseOptions, ...options });
+    streamPrompt(prompt, options = {}) {
+      return streamPrompt(prompt, { ...baseOptions, ...options });
     }
   };
 }
 
-export async function runResponse(input: ConversationInput, options: RunOptions = {}): Promise<CoreResponse> {
-  const stream = streamResponse(input, options);
+export async function runPrompt(prompt: string, options: RunOptions = {}): Promise<CoreResponse> {
+  const stream = streamPrompt(prompt, options);
   let completedResponse: CoreResponse | undefined;
 
   for await (const event of stream) {
@@ -56,12 +53,15 @@ export async function runResponse(input: ConversationInput, options: RunOptions 
   return completedResponse;
 }
 
-export function streamResponse(
-  input: ConversationInput,
-  options: RunOptions = {}
-): AsyncIterable<StreamEvent> {
-  const normalizedInput = normalizeConversationInput(input);
-  const prompt = serializeConversationInput(normalizedInput);
+export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIterable<StreamEvent> {
+  if (typeof prompt !== "string") {
+    throw new Error("Prompt must be a string");
+  }
+
+  if (!prompt.trim()) {
+    throw new Error("Prompt must not be empty");
+  }
+
   const normalizedOptions = normalizeRunOptions(options);
   const { model, reasoningEffort, maxTokens, sandbox, timeoutMs, cliPath } = normalizedOptions;
   assertCliPathExists(cliPath);
@@ -128,7 +128,7 @@ export function streamResponse(
     response: createResponseShell({
       responseId,
       model,
-      normalizedInput,
+      prompt,
       startedAt
     })
   });
@@ -160,7 +160,7 @@ export function streamResponse(
       ...createResponseShell({
         responseId,
         model,
-        normalizedInput,
+        prompt,
         startedAt
       }),
       content,
@@ -292,7 +292,7 @@ export function streamResponse(
   return queue;
 }
 
-export const execCodex = runResponse;
+export const execCodex = runPrompt;
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_STDERR_LENGTH = 64 * 1024;
@@ -403,19 +403,18 @@ function withCleanupPreserved(error: unknown, cleanupTasks: Array<() => void>): 
 function createResponseShell({
   responseId,
   model,
-  normalizedInput,
+  prompt,
   startedAt
 }: {
   responseId: string;
   model: string;
-  normalizedInput: ReturnType<typeof normalizeConversationInput>;
+  prompt: string;
   startedAt: number;
 }): ResponseShell {
   return {
     id: responseId,
     model,
-    instructions: normalizedInput.instructions,
-    messages: normalizedInput.messages,
+    prompt,
     createdAt: Math.floor(startedAt / 1000)
   };
 }

@@ -40,15 +40,8 @@ function runCli(args: string[], options: { env?: NodeJS.ProcessEnv; input?: stri
 {
   const { dir: authDir, file: authFile } = makeTempAuth();
   const { dir, file } = makeTempFile(
-    "chat.json",
-    JSON.stringify(
-      {
-        instructions: "Answer briefly.",
-        input: [{ role: "user", content: "Hello from file" }]
-      },
-      null,
-      2
-    )
+    "prompt.txt",
+    "Hello from file"
   );
 
   try {
@@ -59,9 +52,8 @@ function runCli(args: string[], options: { env?: NodeJS.ProcessEnv; input?: stri
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const parsed = JSON.parse(result.stdout);
-    assert.match(parsed.content, /FAKE:/);
-    assert.match(parsed.content, /Hello from file/);
-    assert.equal(parsed.messages[0].content, "Hello from file");
+    assert.equal(parsed.prompt, "Hello from file");
+    assert.equal(parsed.content, "FAKE:Hello from file");
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
     fs.rmSync(authDir, { recursive: true, force: true });
@@ -70,13 +62,11 @@ function runCli(args: string[], options: { env?: NodeJS.ProcessEnv; input?: stri
 
 {
   const { dir: authDir, file: authFile } = makeTempAuth();
-  const result = runCli(["--stdin-json", "--stream", "--json", "--cli", fakeCodexPath], {
+  const result = runCli(["--stream", "--json", "--cli", fakeCodexPath], {
     env: {
       CODEX_TO_LLM_AUTH_PATH: authFile
     },
-    input: JSON.stringify({
-      input: [{ role: "user", content: "Hello from stdin" }]
-    })
+    input: "Hello from stdin"
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);

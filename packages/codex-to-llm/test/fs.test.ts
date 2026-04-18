@@ -7,7 +7,7 @@ import {
   cleanupDirectory,
   createCodexHome,
   prepareAuthCopy,
-  runResponse
+  runPrompt
 } from "../src/index.js";
 
 function makeTempDir(): string {
@@ -67,7 +67,7 @@ test("cleanupDirectory removes owned temp directories and ignores disabled clean
   cleanupDirectory(keepDir, true);
 });
 
-test("runResponse reports a helpful error when the codex CLI is missing", async () => {
+test("runPrompt reports a helpful error when the codex CLI is missing", async () => {
   const sourceDir = makeTempDir();
   const workspace = makeTempDir();
   const configHome = makeTempDir();
@@ -76,15 +76,8 @@ test("runResponse reports a helpful error when the codex CLI is missing", async 
   fs.writeFileSync(sourceAuth, "{\"token\":\"x\"}\n", "utf8");
 
   await assert.rejects(
-    runResponse(
-      {
-        messages: [
-          {
-            role: "user",
-            content: "Hi"
-          }
-        ]
-      },
+    runPrompt(
+      "Hi",
       {
         authPath: sourceAuth,
         cliPath: path.join(sourceDir, "missing-codex"),

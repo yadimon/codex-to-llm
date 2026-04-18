@@ -2,8 +2,8 @@
 
 Monorepo for two npm packages built around the Codex CLI:
 
-- `@yadimon/codex-to-llm`: SDK and CLI wrapper around `codex exec`
-- `@yadimon/codex-to-llm-server`: OpenAI-compatible `/v1/responses` server built on top of the core package
+- `@yadimon/codex-to-llm`: raw prompt SDK and CLI around `codex exec`
+- `@yadimon/codex-to-llm-server`: OpenAI-compatible `/v1/responses` server that adapts dialog input on top of the raw core package
 
 The package-level READMEs are the npm-facing docs:
 

@@ -2,13 +2,11 @@ import { createServer as createHttpServer, type IncomingMessage, type ServerResp
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import {
   DEFAULT_MODEL,
-  runResponse as defaultRunResponse,
-  streamResponse as defaultStreamResponse
+  runPrompt as defaultRunPrompt,
+  streamPrompt as defaultStreamPrompt
 } from "@yadimon/codex-to-llm";
 import type {
-  ConversationMessageInput,
   CoreResponse,
-  ConversationInput,
   RunOptions,
   StreamEvent
 } from "@yadimon/codex-to-llm";
@@ -28,7 +26,7 @@ const UNSUPPORTED_REQUEST_FIELDS = [
 export interface ResponsesRequestBody {
   model?: string;
   stream?: boolean;
-  input?: ConversationInput;
+  input?: ResponsesInput;
   instructions?: string;
   max_output_tokens?: number;
   reasoning?: {
@@ -44,8 +42,8 @@ export interface ResponsesRequestBody {
 }
 
 export interface Runner {
-  runResponse(input: ConversationInput, options?: RunOptions): Promise<CoreResponse>;
-  streamResponse(input: ConversationInput, options?: RunOptions): AsyncIterable<StreamEvent>;
+  runPrompt(prompt: string, options?: RunOptions): Promise<CoreResponse>;
+  streamPrompt(prompt: string, options?: RunOptions): AsyncIterable<StreamEvent>;
 }
 
 export interface ServerOptions extends RunOptions {
@@ -59,11 +57,29 @@ export interface ServerOptions extends RunOptions {
 }
 
 type HttpError = Error & { statusCode: number };
-type ServerCoreInput = {
+type ServerPromptInput = {
   instructions?: string;
-  input?: string | ConversationMessageInput[];
+  input?: ResponsesInput;
 };
+type MessageRole = "system" | "developer" | "user" | "assistant";
+type MessageTextBlock = {
+  type: "text" | "input_text" | "output_text";
+  text: string;
+};
+type ConversationMessageInput = {
+  role?: MessageRole;
+  content: string | MessageTextBlock[];
+};
+type ResponsesInput =
+  | string
+  | ConversationMessageInput[]
+  | {
+      input?: string | ConversationMessageInput[];
+      messages?: ConversationMessageInput[];
+    };
 const VALID_REASONING_EFFORTS = new Set(["low", "medium", "high"]);
+const SUPPORTED_ROLES = new Set<MessageRole>(["system", "developer", "user", "assistant"]);
+const TEXT_BLOCK_TYPES = new Set<MessageTextBlock["type"]>(["text", "input_text", "output_text"]);
 
 export function createServer(options: ServerOptions = {}) {
   const host = options.host || process.env.CODEX_TO_LLM_SERVER_HOST || DEFAULT_HOST;
@@ -91,15 +107,15 @@ export function createServer(options: ServerOptions = {}) {
         const body = await readJsonBody(request);
         validateResponsesRequest(body);
         validateRequestedModel(body.model, models);
-        const coreInput = requestToCoreInput(body);
+        const prompt = requestToPrompt(body);
         const runOptions = requestToRunOptions(body, options);
 
         if (body.stream) {
-          await streamOpenAIResponse(response, runner, coreInput, runOptions);
+          await streamOpenAIResponse(response, runner, prompt, runOptions);
           return;
         }
 
-        const result = await runner.runResponse(coreInput, runOptions);
+        const result = await runner.runPrompt(prompt, runOptions);
         sendJson(response, 200, buildOpenAIResponse(result));
         return;
       }
@@ -199,14 +215,14 @@ function createDefaultRunner(options: ServerOptions): Runner {
   }
 
   return {
-    runResponse(input, requestOptions = {}) {
-      return defaultRunResponse(input, {
+    runPrompt(prompt, requestOptions = {}) {
+      return defaultRunPrompt(prompt, {
         ...defaultRunnerOptions(options),
         ...requestOptions
       });
     },
-    streamResponse(input, requestOptions = {}) {
-      return defaultStreamResponse(input, {
+    streamPrompt(prompt, requestOptions = {}) {
+      return defaultStreamPrompt(prompt, {
         ...defaultRunnerOptions(options),
         ...requestOptions
       });
@@ -216,11 +232,11 @@ function createDefaultRunner(options: ServerOptions): Runner {
 
 function createMockRunner(options: ServerOptions): Runner {
   return {
-    async runResponse(input, requestOptions = {}) {
-      return buildMockCoreResponse(input, requestOptions, options);
+    async runPrompt(prompt, requestOptions = {}) {
+      return buildMockCoreResponse(prompt, requestOptions, options);
     },
-    async *streamResponse(input, requestOptions = {}) {
-      const response = buildMockCoreResponse(input, requestOptions, options);
+    async *streamPrompt(prompt, requestOptions = {}) {
+      const response = buildMockCoreResponse(prompt, requestOptions, options);
       for (const event of response.raw.events) {
         yield {
           type: "response.raw_event",
@@ -232,8 +248,7 @@ function createMockRunner(options: ServerOptions): Runner {
         response: {
           id: response.id,
           model: response.model,
-          instructions: response.instructions,
-          messages: response.messages,
+          prompt: response.prompt,
           createdAt: response.createdAt
         }
       };
@@ -250,7 +265,7 @@ function createMockRunner(options: ServerOptions): Runner {
 }
 
 function buildMockCoreResponse(
-  input: ConversationInput,
+  prompt: string,
   requestOptions: RunOptions,
   options: ServerOptions
 ): CoreResponse {
@@ -260,12 +275,7 @@ function buildMockCoreResponse(
     process.env.CODEX_TO_LLM_SERVER_DEFAULT_MODEL ||
     DEFAULT_MODEL;
   const content = process.env.CODEX_TO_LLM_SERVER_MOCK_RESPONSE || "mock response";
-  const normalizedInput = isObjectWithInput(input)
-    ? typeof input.input === "string"
-      ? input.input
-      : JSON.stringify(input.input ?? "", null, 2)
-    : "";
-  const inputTokens = Math.ceil(normalizedInput.length / 4);
+  const inputTokens = Math.ceil(prompt.length / 4);
   const outputTokens = Math.ceil(content.length / 4);
   const rawEvents = [
     {
@@ -287,13 +297,7 @@ function buildMockCoreResponse(
   return {
     id: `resp_mock_${randomUUID().replace(/-/g, "")}`,
     model,
-    instructions: typeof input === "object" && input && !Array.isArray(input) ? input.instructions : undefined,
-    messages: [
-      {
-        role: "user",
-        content: normalizedInput
-      }
-    ],
+    prompt,
     createdAt: Math.floor(Date.now() / 1000),
     content,
     usage: {
@@ -379,12 +383,11 @@ function validateRequestedModel(model: string | undefined, models: string[]): vo
   }
 }
 
-function requestToCoreInput(body: ResponsesRequestBody): ServerCoreInput {
-  return {
+function requestToPrompt(body: ResponsesRequestBody): string {
+  return serializeServerPrompt({
     instructions: body.instructions,
-    input:
-      typeof body.input === "string" || Array.isArray(body.input) ? body.input : JSON.stringify(body.input ?? "")
-  };
+    input: body.input
+  });
 }
 
 function requestToRunOptions(body: ResponsesRequestBody, options: ServerOptions): RunOptions {
@@ -421,7 +424,7 @@ function validateMaxOutputTokens(maxOutputTokens: number | undefined): void {
 async function streamOpenAIResponse(
   response: ServerResponse,
   runner: Runner,
-  coreInput: ServerCoreInput,
+  prompt: string,
   runOptions: RunOptions
 ) {
   response.statusCode = 200;
@@ -433,7 +436,7 @@ async function streamOpenAIResponse(
   let hasError = false;
 
   try {
-    for await (const event of runner.streamResponse(coreInput, runOptions)) {
+    for await (const event of runner.streamPrompt(prompt, runOptions)) {
       if (event.type === "response.started" && event.response) {
         writeSse(response, "response.created", {
           id: event.response.id,
@@ -568,8 +571,142 @@ function isHttpError(error: unknown): error is HttpError {
   return error instanceof Error && "statusCode" in error && typeof (error as HttpError).statusCode === "number";
 }
 
-function isObjectWithInput(
-  input: ConversationInput
-): input is Extract<ConversationInput, { input?: ConversationInput }> {
-  return typeof input === "object" && input !== null && !Array.isArray(input) && "input" in input;
+function serializeServerPrompt(input: ServerPromptInput): string {
+  const normalized = normalizeServerPromptInput(input);
+  const sections = [
+    "You are being called through a stateless LLM adapter.",
+    "Use the conversation exactly as provided and answer as the assistant."
+  ];
+
+  if (normalized.instructions) {
+    sections.push(`## Instructions\n${normalized.instructions}`);
+  }
+
+  const conversation = normalized.messages
+    .map(message => `### ${message.role}\n${message.content}`)
+    .join("\n\n");
+  sections.push(`## Conversation\n${conversation}`);
+  sections.push("## Assistant Response\nRespond to the latest conversation turn.");
+
+  return sections.join("\n\n");
+}
+
+function normalizeServerPromptInput(input: ServerPromptInput): {
+  instructions?: string;
+  messages: Array<{ role: MessageRole; content: string }>;
+} {
+  const instructions =
+    input.instructions == null ? undefined : normalizeText(input.instructions, "instructions");
+  const messages: Array<{ role: MessageRole; content: string }> = [];
+  const source = input.input;
+
+  if (typeof source === "string") {
+    messages.push({
+      role: "user",
+      content: normalizeText(source, "input")
+    });
+  } else if (Array.isArray(source)) {
+    messages.push(...normalizeMessageEntries(source, "user"));
+  } else if (source && typeof source === "object") {
+    if (source.messages != null) {
+      if (!Array.isArray(source.messages)) {
+        throw createHttpError(400, "input.messages must be an array");
+      }
+      messages.push(...normalizeMessageEntries(source.messages));
+    }
+
+    if (source.input != null) {
+      messages.push(
+        ...normalizeMessageEntries(
+          typeof source.input === "string" || Array.isArray(source.input)
+            ? source.input
+            : JSON.stringify(source.input),
+          "user"
+        )
+      );
+    }
+  } else {
+    messages.push({
+      role: "user",
+      content: normalizeText(JSON.stringify(source ?? ""), "input")
+    });
+  }
+
+  if (messages.length === 0) {
+    throw createHttpError(400, "input is required");
+  }
+
+  return { instructions, messages };
+}
+
+function normalizeMessageEntries(
+  entries: string | ConversationMessageInput[],
+  defaultRole?: MessageRole
+): Array<{ role: MessageRole; content: string }> {
+  if (typeof entries === "string") {
+    return [
+      {
+        role: defaultRole || "user",
+        content: normalizeText(entries, "message")
+      }
+    ];
+  }
+
+  return entries.map((entry, index) => normalizeMessage(entry, defaultRole, index));
+}
+
+function normalizeMessage(
+  entry: ConversationMessageInput,
+  defaultRole: MessageRole | undefined,
+  index: number
+): { role: MessageRole; content: string } {
+  if (!entry || typeof entry !== "object") {
+    throw createHttpError(400, `Message at index ${index} must be an object`);
+  }
+
+  const role = entry.role || defaultRole;
+  if (!role || !SUPPORTED_ROLES.has(role)) {
+    throw createHttpError(400, `Unsupported message role: ${role}`);
+  }
+
+  return {
+    role,
+    content: normalizeMessageContent(entry.content, `content for message ${index}`)
+  };
+}
+
+function normalizeMessageContent(content: string | MessageTextBlock[], label: string): string {
+  if (typeof content === "string") {
+    return normalizeText(content, label);
+  }
+
+  if (!Array.isArray(content)) {
+    throw createHttpError(400, `${label} must be a string or text block array`);
+  }
+
+  const blocks = content.map((block, index) => {
+    if (!block || typeof block !== "object") {
+      throw createHttpError(400, `${label} block ${index} must be an object`);
+    }
+
+    if (!TEXT_BLOCK_TYPES.has(block.type) || typeof block.text !== "string") {
+      throw createHttpError(400, `${label} block ${index} must be a supported text block`);
+    }
+
+    return normalizeText(block.text, `${label} block ${index}`);
+  });
+
+  return blocks.join("\n\n");
+}
+
+function normalizeText(value: string, label: string): string {
+  if (typeof value !== "string") {
+    throw createHttpError(400, `${label} must be a string`);
+  }
+
+  if (!value.trim()) {
+    throw createHttpError(400, `${label} must not be empty`);
+  }
+
+  return value;
 }

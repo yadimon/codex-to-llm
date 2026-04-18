@@ -1,31 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { ConversationInput, RunOptions, StreamEvent } from "@yadimon/codex-to-llm";
+import type { RunOptions, StreamEvent } from "@yadimon/codex-to-llm";
 import {
   buildOpenAIResponse,
   startServer
 } from "../src/index.js";
 
-function createStubRunner(calls: Array<{ input: ConversationInput; options: RunOptions }> = []) {
+function createStubRunner(calls: Array<{ prompt: string; options: RunOptions }> = []) {
   return {
-    async runResponse(input: ConversationInput, options: RunOptions = {}) {
-      calls.push({ input, options });
+    async runPrompt(prompt: string, options: RunOptions = {}) {
+      calls.push({ prompt, options });
       return {
         id: "resp_stub",
         model: options.model || "gpt-5.3-codex-spark",
-        instructions: typeof input === "object" && input && !Array.isArray(input) ? input.instructions : undefined,
-        messages: [
-          {
-            role: "user" as const,
-            content:
-              typeof input === "object" &&
-              input &&
-              !Array.isArray(input) &&
-              typeof input.input === "string"
-                ? input.input
-                : "hello"
-          }
-        ],
+        prompt,
         createdAt: 1,
         content: "hello world",
         usage: {
@@ -40,15 +28,14 @@ function createStubRunner(calls: Array<{ input: ConversationInput; options: RunO
         }
       };
     },
-    async *streamResponse(input: ConversationInput, options: RunOptions = {}): AsyncGenerator<StreamEvent> {
-      calls.push({ input, options });
+    async *streamPrompt(prompt: string, options: RunOptions = {}): AsyncGenerator<StreamEvent> {
+      calls.push({ prompt, options });
       yield {
         type: "response.started",
         response: {
           id: "resp_stream",
           model: options.model || "gpt-5.3-codex-spark",
-          instructions: typeof input === "object" && input && !Array.isArray(input) ? input.instructions : undefined,
-          messages: [],
+          prompt,
           createdAt: 1
         }
       };
@@ -61,19 +48,7 @@ function createStubRunner(calls: Array<{ input: ConversationInput; options: RunO
         response: {
           id: "resp_stream",
           model: options.model || "gpt-5.3-codex-spark",
-          instructions: typeof input === "object" && input && !Array.isArray(input) ? input.instructions : undefined,
-          messages: [
-            {
-              role: "user",
-              content:
-                typeof input === "object" &&
-                input &&
-                !Array.isArray(input) &&
-                typeof input.input === "string"
-                  ? input.input
-                  : "hello"
-            }
-          ],
+          prompt,
           createdAt: 1,
           content: "hello world",
           usage: {
@@ -97,8 +72,7 @@ test("buildOpenAIResponse maps core results into response objects", () => {
     id: "resp_1",
     createdAt: 1,
     model: "gpt-5.3-codex-spark",
-    instructions: undefined,
-    messages: [],
+    prompt: "Hello",
     content: "hello world",
     usage: {
       inputTokens: 11,
@@ -237,7 +211,7 @@ test("server rejects unsupported fields and enforces bearer auth on responses on
 });
 
 test("server forwards max_output_tokens and reasoning effort to the runner", async () => {
-  const calls: Array<{ input: ConversationInput; options: RunOptions }> = [];
+  const calls: Array<{ prompt: string; options: RunOptions }> = [];
   const started = await startServer({
     host: "127.0.0.1",
     port: 0,
@@ -265,6 +239,7 @@ test("server forwards max_output_tokens and reasoning effort to the runner", asy
     assert.equal(calls.length, 1);
     assert.equal(calls[0].options.maxTokens, 500);
     assert.equal(calls[0].options.reasoningEffort, "high");
+    assert.match(calls[0].prompt, /## Conversation/);
   } finally {
     await started.close();
   }
@@ -360,17 +335,16 @@ test("server does not send DONE after a streaming failure", async () => {
     host: "127.0.0.1",
     port: 0,
     runner: {
-      async runResponse() {
+      async runPrompt() {
         throw new Error("not used");
       },
-      async *streamResponse(): AsyncGenerator<StreamEvent> {
+      async *streamPrompt(): AsyncGenerator<StreamEvent> {
         yield {
           type: "response.started",
           response: {
             id: "resp_stream",
             model: "gpt-5.3-codex-spark",
-            instructions: undefined,
-            messages: [],
+            prompt: "Hello",
             createdAt: 1
           }
         };
@@ -405,17 +379,16 @@ test("server reports a failed SSE stream when no completed response arrives", as
     host: "127.0.0.1",
     port: 0,
     runner: {
-      async runResponse() {
+      async runPrompt() {
         throw new Error("not used");
       },
-      async *streamResponse(): AsyncGenerator<StreamEvent> {
+      async *streamPrompt(): AsyncGenerator<StreamEvent> {
         yield {
           type: "response.started",
           response: {
             id: "resp_stream",
             model: "gpt-5.3-codex-spark",
-            instructions: undefined,
-            messages: [],
+            prompt: "Hello",
             createdAt: 1
           }
         };

@@ -4,17 +4,11 @@ const started = await startServer({
   host: "127.0.0.1",
   port: 0,
   runner: {
-    async runResponse() {
+    async runPrompt() {
       return {
         id: "resp_smoke",
         model: "gpt-5.3-codex-spark",
-        instructions: undefined,
-        messages: [
-          {
-            role: "user",
-            content: "Hi"
-          }
-        ],
+        prompt: "Hi",
         createdAt: Math.floor(Date.now() / 1000),
         content: "ok",
         usage: {
@@ -29,21 +23,15 @@ const started = await startServer({
         }
       };
     },
-    async *streamResponse() {
-      yield { type: "response.started", response: { id: "resp_smoke", model: "gpt-5.3-codex-spark", createdAt: Math.floor(Date.now() / 1000), instructions: undefined, messages: [] } };
+    async *streamPrompt() {
+      yield { type: "response.started", response: { id: "resp_smoke", model: "gpt-5.3-codex-spark", createdAt: Math.floor(Date.now() / 1000), prompt: "Hi" } };
       yield { type: "response.output_text.delta", delta: "ok" };
       yield {
         type: "response.completed",
         response: {
           id: "resp_smoke",
           model: "gpt-5.3-codex-spark",
-          instructions: undefined,
-          messages: [
-            {
-              role: "user",
-              content: "Hi"
-            }
-          ],
+          prompt: "Hi",
           createdAt: Math.floor(Date.now() / 1000),
           content: "ok",
           usage: {

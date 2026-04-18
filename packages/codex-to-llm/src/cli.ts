@@ -5,10 +5,10 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createCliArgReader,
-  runResponse,
-  streamResponse
+  runPrompt,
+  streamPrompt
 } from "./index.js";
-import type { ConversationInput, RunOptions } from "./types.js";
+import type { RunOptions } from "./types.js";
 
 const args = process.argv.slice(2);
 const { getArg, hasFlag } = createCliArgReader(args);
@@ -16,14 +16,12 @@ export const HELP_TEXT = `codex-to-llm
 
 Usage:
   codex-to-llm --prompt "Hi"
-  codex-to-llm --input-file ./chat.json --json
-  codex-to-llm --stdin-json --stream --json
+  codex-to-llm --input-file ./prompt.txt --json
+  cat ./prompt.txt | codex-to-llm --stream --json
 
 Options:
   --prompt <text>
-  --input-json <json>
   --input-file <path>
-  --stdin-json
   --stream
   --json
   --model <name>
@@ -42,37 +40,28 @@ async function readStdin(): Promise<string> {
     process.stdin.on("data", chunk => {
       input += chunk;
     });
-    process.stdin.on("end", () => resolve(input.trim()));
+    process.stdin.on("end", () => resolve(input));
     process.stdin.on("error", reject);
   });
 }
 
-async function readCliInput(): Promise<ConversationInput> {
+async function readCliInput(): Promise<string> {
   const inlinePrompt = getArg("--prompt");
-  if (inlinePrompt) {
+  if (inlinePrompt != null) {
     return inlinePrompt;
-  }
-
-  const inputJson = getArg("--input-json");
-  if (inputJson) {
-    return parseJsonInput(inputJson, "--input-json");
   }
 
   const inputFile = getArg("--input-file");
   if (inputFile) {
-    return parseJsonInput(fs.readFileSync(inputFile, "utf8"), "--input-file");
+    return fs.readFileSync(inputFile, "utf8");
   }
 
-  const stdinText = await readStdin();
-  if (!stdinText) {
-    throw new Error("Prompt or JSON input is required");
+  const stdinPrompt = await readStdin();
+  if (!stdinPrompt.length) {
+    throw new Error("Prompt input is required");
   }
 
-  if (hasFlag("--stdin-json")) {
-    return parseJsonInput(stdinText, "--stdin-json");
-  }
-
-  return stdinText;
+  return stdinPrompt;
 }
 
 function buildRunOptions(): RunOptions {
@@ -88,15 +77,6 @@ function buildRunOptions(): RunOptions {
     cliPath: getArg("--cli")
   };
 }
-
-function parseJsonInput(raw: string, source: "--input-json" | "--input-file" | "--stdin-json"): ConversationInput {
-  try {
-    return JSON.parse(raw) as ConversationInput;
-  } catch {
-    throw new Error(`Invalid JSON for ${source}`);
-  }
-}
-
 export async function main(): Promise<void> {
   if (hasFlag("--help") || hasFlag("-h")) {
     console.log(HELP_TEXT);
@@ -107,7 +87,7 @@ export async function main(): Promise<void> {
   const options = buildRunOptions();
 
   if (hasFlag("--stream")) {
-    for await (const event of streamResponse(input, options)) {
+    for await (const event of streamPrompt(input, options)) {
       if (hasFlag("--json")) {
         process.stdout.write(`${JSON.stringify(event)}\n`);
         continue;
@@ -120,7 +100,7 @@ export async function main(): Promise<void> {
     return;
   }
 
-  const result = await runResponse(input, options);
+  const result = await runPrompt(input, options);
   if (hasFlag("--json")) {
     console.log(JSON.stringify(result, null, 2));
     return;
