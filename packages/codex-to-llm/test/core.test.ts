@@ -102,7 +102,10 @@ test("normalizeRunOptions rejects invalid timeout values", () => {
     () => normalizeRunOptions({ timeout: Number.NaN }),
     /Invalid timeout/
   );
-  assert.equal(normalizeRunOptions({ timeout: 1500.9 }).timeoutMs, 1500);
+  assert.throws(
+    () => normalizeRunOptions({ timeout: 1500.9 }),
+    /Invalid timeout/
+  );
 });
 
 test("normalizeRunOptions rejects invalid maxTokens values", () => {
@@ -114,6 +117,22 @@ test("normalizeRunOptions rejects invalid maxTokens values", () => {
     () => normalizeRunOptions({ maxTokens: 1.5 }),
     /Invalid maxTokens/
   );
+});
+
+test("normalizeRunOptions resolves cliPath from explicit options and environment", () => {
+  const previousCliPath = process.env.CODEX_TO_LLM_CLI_PATH;
+  process.env.CODEX_TO_LLM_CLI_PATH = "codex-from-env";
+
+  try {
+    assert.equal(normalizeRunOptions({}).cliPath, "codex-from-env");
+    assert.equal(normalizeRunOptions({ cliPath: "custom-codex" }).cliPath, "custom-codex");
+  } finally {
+    if (previousCliPath == null) {
+      delete process.env.CODEX_TO_LLM_CLI_PATH;
+    } else {
+      process.env.CODEX_TO_LLM_CLI_PATH = previousCliPath;
+    }
+  }
 });
 
 test("normalizeSpawnError provides targeted permission errors", () => {

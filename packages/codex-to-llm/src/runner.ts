@@ -63,9 +63,7 @@ export function streamResponse(
   const normalizedInput = normalizeConversationInput(input);
   const prompt = serializeConversationInput(normalizedInput);
   const normalizedOptions = normalizeRunOptions(options);
-  const { model, reasoningEffort, maxTokens, sandbox, timeoutMs } = normalizedOptions;
-  const cliPath =
-    options.cliPath || process.env.CODEX_TO_LLM_CLI_PATH || process.env.CODEX_CLI_PATH || "codex";
+  const { model, reasoningEffort, maxTokens, sandbox, timeoutMs, cliPath } = normalizedOptions;
   assertCliPathExists(cliPath);
   const ownsWorkspace = !options.cwd;
   const ownsCodexHome = !options.configHome;
@@ -310,8 +308,18 @@ export function normalizeRunOptions(options: RunOptions = {}): NormalizedRunOpti
     ),
     maxTokens: normalizeMaxTokens(options.maxTokens),
     sandbox: normalizeCliToken(options.sandbox, DEFAULT_SANDBOX, "sandbox"),
-    timeoutMs: normalizeTimeout(options.timeout)
+    timeoutMs: normalizeTimeout(options.timeout),
+    cliPath: normalizeCliPath(options.cliPath)
   };
+}
+
+function normalizeCliPath(value: string | undefined): string {
+  const normalized = value || process.env.CODEX_TO_LLM_CLI_PATH || "codex";
+  if (!normalized.trim()) {
+    throw new Error("Invalid cliPath: expected a non-empty path or command");
+  }
+
+  return normalized;
 }
 
 function normalizeCliToken(value: string | undefined, fallback: string, fieldName: string): string {
@@ -330,11 +338,11 @@ function normalizeTimeout(value: number | undefined): number {
     return DEFAULT_TIMEOUT_MS;
   }
 
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error("Invalid timeout: expected a positive finite number of milliseconds");
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error("Invalid timeout: expected a positive integer number of milliseconds");
   }
 
-  return Math.floor(value);
+  return value;
 }
 
 function normalizeMaxTokens(value: number | undefined): number {

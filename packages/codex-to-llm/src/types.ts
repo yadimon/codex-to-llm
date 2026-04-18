@@ -22,6 +22,7 @@ export interface NormalizedRunOptions {
   maxTokens: number;
   timeoutMs: number;
   sandbox: string;
+  cliPath: string;
 }
 
 export interface NormalizedMessage {

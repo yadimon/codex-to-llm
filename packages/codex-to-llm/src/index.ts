@@ -1,6 +1,7 @@
 export * from "./types.js";
 export * from "./normalize.js";
 export * from "./serialize.js";
+export * from "./cli-args.js";
 export * from "./spawn.js";
 export * from "./queue.js";
 export * from "./platform.js";

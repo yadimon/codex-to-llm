@@ -3,9 +3,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createCliArgReader } from "@yadimon/codex-to-llm";
 import { startServer } from "./index.js";
 
 const args = process.argv.slice(2);
+const { getArg, hasFlag } = createCliArgReader(args);
 export const HELP_TEXT = `codex-to-llm-server
 
 Usage:
@@ -20,19 +22,6 @@ Options:
   --config-home <path>
   --cwd <path>
   --cli <path>`;
-
-function getArg(name: string, fallback?: string): string | undefined {
-  const index = args.indexOf(name);
-  if (index !== -1 && args[index + 1]) {
-    return args[index + 1];
-  }
-
-  return fallback;
-}
-
-function hasFlag(name: string): boolean {
-  return args.includes(name);
-}
 
 export async function main(): Promise<void> {
   if (hasFlag("--help") || hasFlag("-h")) {
