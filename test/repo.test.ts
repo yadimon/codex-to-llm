@@ -70,7 +70,12 @@ test("CI workflow verifies supported node versions and Docker flow", () => {
   assert.match(ciWorkflow, /name: Test server package/);
   assert.match(ciWorkflow, /name: Core e2e/);
   assert.match(ciWorkflow, /name: Server e2e/);
-  assert.match(ciWorkflow, /name: Publish dry run/);
+  assert.match(ciWorkflow, /name: Pack core package/);
+  assert.match(ciWorkflow, /name: Pack server package/);
+  assert.match(ciWorkflow, /name: Publish core package dry run/);
+  assert.match(ciWorkflow, /name: Publish server package dry run/);
+  assert.match(ciWorkflow, /npm run publish:dry-run --workspace @yadimon\/codex-to-llm/);
+  assert.match(ciWorkflow, /npm run publish:dry-run --workspace @yadimon\/codex-to-llm-server/);
   assert.match(ciWorkflow, /docker:/);
   assert.match(ciWorkflow, /npm run test:docker/);
 });
@@ -80,6 +85,12 @@ test("publish workflow keeps trusted publishing and package-specific tag guards"
   assert.match(publishWorkflow, /codex-to-llm-v\*/);
   assert.match(publishWorkflow, /codex-to-llm-server-v\*/);
   assert.match(publishWorkflow, /id-token: write/);
+  assert.match(publishWorkflow, /name: Pack core package/);
+  assert.match(publishWorkflow, /name: Publish core package dry run/);
+  assert.match(publishWorkflow, /name: Pack server package/);
+  assert.match(publishWorkflow, /name: Publish server package dry run/);
+  assert.match(publishWorkflow, /npm run publish:dry-run --workspace @yadimon\/codex-to-llm/);
+  assert.match(publishWorkflow, /npm run publish:dry-run --workspace @yadimon\/codex-to-llm-server/);
   assert.match(publishWorkflow, /npm publish --workspace @yadimon\/codex-to-llm/);
   assert.match(publishWorkflow, /npm publish --workspace @yadimon\/codex-to-llm-server/);
   assert.match(publishWorkflow, /Verify tag matches core package version/);

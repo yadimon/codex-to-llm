@@ -51,11 +51,17 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Pack
-        run: npm run pack
+      - name: Pack core package
+        run: npm run pack --workspace @yadimon/codex-to-llm
 
-      - name: Publish dry run
-        run: npm run publish:dry-run
+      - name: Pack server package
+        run: npm run pack --workspace @yadimon/codex-to-llm-server
+
+      - name: Publish core package dry run
+        run: npm run publish:dry-run --workspace @yadimon/codex-to-llm
+
+      - name: Publish server package dry run
+        run: npm run publish:dry-run --workspace @yadimon/codex-to-llm-server
 
   docker:
     runs-on: ubuntu-latest

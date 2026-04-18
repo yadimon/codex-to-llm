@@ -71,11 +71,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Pack
-        run: npm run pack
+      - name: Pack core package
+        run: npm run pack --workspace @yadimon/codex-to-llm
 
-      - name: Publish dry run
-        run: npm run publish:dry-run
+      - name: Publish core package dry run
+        run: npm run publish:dry-run --workspace @yadimon/codex-to-llm
 
       - name: Publish core package to npm with Trusted Publishing
         run: npm publish --workspace @yadimon/codex-to-llm
@@ -132,11 +132,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Pack
-        run: npm run pack
+      - name: Pack server package
+        run: npm run pack --workspace @yadimon/codex-to-llm-server
 
-      - name: Publish dry run
-        run: npm run publish:dry-run
+      - name: Publish server package dry run
+        run: npm run publish:dry-run --workspace @yadimon/codex-to-llm-server
 
       - name: Publish server package to npm with Trusted Publishing
         run: npm publish --workspace @yadimon/codex-to-llm-server
