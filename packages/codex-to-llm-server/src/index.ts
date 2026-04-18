@@ -1,5 +1,5 @@
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import {
   DEFAULT_MODEL,
   runResponse as defaultRunResponse,
@@ -339,11 +339,18 @@ function assertAuthorized(request: IncomingMessage, apiKey?: string): void {
   }
 
   const authorization = request.headers.authorization || "";
-  if (authorization === `Bearer ${apiKey}`) {
+  if (matchesBearerToken(authorization, apiKey)) {
     return;
   }
 
   throw createHttpError(401, "Missing or invalid bearer token");
+}
+
+function matchesBearerToken(authorization: string, apiKey: string): boolean {
+  const expected = Buffer.from(`Bearer ${apiKey}`);
+  const actual = Buffer.from(authorization);
+
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
 function validateResponsesRequest(body: ResponsesRequestBody): void {
