@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { createEmptyUsage, isAgentMessageEvent, normalizeUsage, parseCodexEventLine } from "./parse.js";
+import {
+  createEmptyUsage,
+  isAgentMessageEvent,
+  isErrorEvent,
+  isTurnFailedEvent,
+  normalizeUsage,
+  parseCodexEventLine
+} from "./parse.js";
 import { assertCliPathExists, normalizeSpawnError } from "./platform.js";
 import { AsyncQueue } from "./queue.js";
 import { resolveSpawn } from "./spawn.js";
@@ -91,6 +98,7 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
   let content = "";
   let stderr = "";
   let stdoutBuffer = "";
+  let lastErrorMessage = "";
   let usage: UsageSummary = createEmptyUsage();
 
   const cliArgs = [
@@ -232,6 +240,14 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
       });
     }
 
+    if (isErrorEvent(event)) {
+      lastErrorMessage = event.message;
+    }
+
+    if (isTurnFailedEvent(event)) {
+      lastErrorMessage = event.error.message;
+    }
+
     if (event.type === "turn.completed" && "usage" in event) {
       try {
         const eventUsage = event.usage;
@@ -273,7 +289,7 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
 
   child.on("close", (code, signal) => {
     setImmediate(() => {
-      const exitError = createCodexExitError(code, signal, stderr);
+      const exitError = createCodexExitError(code, signal, stderr, lastErrorMessage);
       if (exitError) {
         finalizeFailure(exitError);
         return;
@@ -370,15 +386,16 @@ function appendBounded(current: string, nextChunk: string): string {
 export function createCodexExitError(
   code: number | null,
   signal: NodeJS.Signals | null,
-  stderr: string
+  stderr: string,
+  errorMessage = ""
 ): Error | undefined {
   const normalizedStderr = stderr.trim();
   if (signal) {
-    return new Error(normalizedStderr || `Codex exited due to signal ${signal}`);
+    return new Error(normalizedStderr || errorMessage || `Codex exited due to signal ${signal}`);
   }
 
   if (code !== 0) {
-    return new Error(normalizedStderr || `Codex exited with code ${code}`);
+    return new Error(normalizedStderr || errorMessage || `Codex exited with code ${code}`);
   }
 
   return undefined;

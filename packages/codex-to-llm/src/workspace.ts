@@ -76,5 +76,25 @@ export function cleanupDirectory(directoryPath: string | undefined, shouldCleanu
     return;
   }
 
-  fs.rmSync(directoryPath, { recursive: true, force: true });
+  try {
+    fs.rmSync(directoryPath, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 50
+    });
+  } catch (error) {
+    if (!isIgnorableCleanupError(error)) {
+      throw error;
+    }
+  }
+}
+
+function isIgnorableCleanupError(error: unknown): boolean {
+  if (!(error instanceof Error) || !("code" in error)) {
+    return false;
+  }
+
+  const code = String(error.code);
+  return code === "EBUSY" || code === "ENOTEMPTY" || code === "EPERM";
 }

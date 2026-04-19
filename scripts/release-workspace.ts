@@ -4,6 +4,16 @@ import * as path from "node:path";
 import { npmCacheDir, repoRoot } from "./workspace-helpers.js";
 
 type BumpType = "patch" | "minor" | "major";
+type ReleaseTarget = {
+  workspaceName: string;
+  bumpType: BumpType;
+  tagPrefix: string;
+  packageJsonPath: string;
+  version?: string;
+};
+
+const CORE_WORKSPACE = "@yadimon/codex-to-llm";
+const SERVER_WORKSPACE = "@yadimon/codex-to-llm-server";
 
 const [, , workspaceName, bumpType, tagPrefix] = process.argv as [
   string,
@@ -23,13 +33,6 @@ if (!workspaceName || !bumpType || !tagPrefix) {
 const releaseWorkspace = workspaceName;
 const releaseBumpType = bumpType;
 const releaseTagPrefix = tagPrefix;
-
-const workspacePackageJsonPath = path.join(
-  repoRoot,
-  "packages",
-  releaseWorkspace.replace(/^@[^/]+\//, ""),
-  "package.json"
-);
 const serverPackageJsonPath = path.join(repoRoot, "packages", "codex-to-llm-server", "package.json");
 
 function runGit(args: string[]): string {
@@ -71,33 +74,20 @@ function main(): void {
   }
 
   runNpm(["run", "check"]);
-  runNpm(["version", releaseBumpType, "--workspace", releaseWorkspace, "--no-git-tag-version"]);
-
-  if (releaseWorkspace === "@yadimon/codex-to-llm") {
-    syncServerDependencyToCore();
-  }
-
+  const releaseTargets = getReleaseTargets();
+  bumpReleaseTargets(releaseTargets);
+  hydrateReleaseTargetVersions(releaseTargets);
   refreshWorkspaceLockfile();
-
-  const packageJson = JSON.parse(fs.readFileSync(workspacePackageJsonPath, "utf8")) as {
-    version: string;
-  };
-  const version = packageJson.version;
-  const tagName = `${releaseTagPrefix}-v${version}`;
-
-  const filesToAdd = ["package-lock.json", workspacePackageJsonPath];
-  if (releaseWorkspace === "@yadimon/codex-to-llm") {
-    filesToAdd.push(serverPackageJsonPath);
-  }
-
-  runGit(["add", ...filesToAdd]);
-  runGit(["commit", "-m", `release(${releaseTagPrefix}): ${version}`]);
-  runGit(["tag", "-a", tagName, "-m", `Release ${tagName}`]);
-  runGit(["push", "origin", "HEAD", tagName]);
+  runGit(["add", ...collectFilesToAdd(releaseTargets)]);
+  runGit(["commit", "-m", createReleaseCommitMessage(releaseTargets)]);
+  const tagNames = createReleaseTags(releaseTargets);
+  runGit(["push", "origin", "HEAD", ...tagNames]);
 }
 
 function syncServerDependencyToCore(): void {
-  const corePackageJson = JSON.parse(fs.readFileSync(workspacePackageJsonPath, "utf8")) as {
+  const corePackageJson = JSON.parse(
+    fs.readFileSync(getWorkspacePackageJsonPath(CORE_WORKSPACE), "utf8")
+  ) as {
     version: string;
   };
   const serverPackageJson = JSON.parse(fs.readFileSync(serverPackageJsonPath, "utf8")) as {
@@ -114,6 +104,90 @@ function syncServerDependencyToCore(): void {
 
 function refreshWorkspaceLockfile(): void {
   runNpm(["install", "--package-lock-only", "--ignore-scripts"]);
+}
+
+function getReleaseTargets(): ReleaseTarget[] {
+  if (releaseWorkspace === CORE_WORKSPACE) {
+    return [
+      createReleaseTarget(CORE_WORKSPACE, releaseBumpType, releaseTagPrefix),
+      createReleaseTarget(SERVER_WORKSPACE, "patch", "codex-to-llm-server")
+    ];
+  }
+
+  return [createReleaseTarget(releaseWorkspace, releaseBumpType, releaseTagPrefix)];
+}
+
+function createReleaseTarget(
+  workspaceName: string,
+  bumpType: BumpType,
+  tagPrefix: string
+): ReleaseTarget {
+  return {
+    workspaceName,
+    bumpType,
+    tagPrefix,
+    packageJsonPath: getWorkspacePackageJsonPath(workspaceName)
+  };
+}
+
+function getWorkspacePackageJsonPath(workspaceName: string): string {
+  return path.join(repoRoot, "packages", workspaceName.replace(/^@[^/]+\//, ""), "package.json");
+}
+
+function bumpReleaseTargets(releaseTargets: ReleaseTarget[]): void {
+  for (const releaseTarget of releaseTargets) {
+    runNpm([
+      "version",
+      releaseTarget.bumpType,
+      "--workspace",
+      releaseTarget.workspaceName,
+      "--no-git-tag-version"
+    ]);
+
+    if (releaseTarget.workspaceName === CORE_WORKSPACE) {
+      syncServerDependencyToCore();
+    }
+  }
+}
+
+function hydrateReleaseTargetVersions(releaseTargets: ReleaseTarget[]): void {
+  for (const releaseTarget of releaseTargets) {
+    const packageJson = JSON.parse(fs.readFileSync(releaseTarget.packageJsonPath, "utf8")) as {
+      version: string;
+    };
+    releaseTarget.version = packageJson.version;
+  }
+}
+
+function collectFilesToAdd(releaseTargets: ReleaseTarget[]): string[] {
+  return ["package-lock.json", ...new Set(releaseTargets.map(releaseTarget => releaseTarget.packageJsonPath))];
+}
+
+function createReleaseCommitMessage(releaseTargets: ReleaseTarget[]): string {
+  const summary = releaseTargets
+    .map(releaseTarget => `${releaseTarget.tagPrefix} v${getReleaseTargetVersion(releaseTarget)}`)
+    .join(", ");
+  return `chore(release): ${summary}`;
+}
+
+function createReleaseTags(releaseTargets: ReleaseTarget[]): string[] {
+  const tagNames: string[] = [];
+
+  for (const releaseTarget of releaseTargets) {
+    const tagName = `${releaseTarget.tagPrefix}-v${getReleaseTargetVersion(releaseTarget)}`;
+    runGit(["tag", "-a", tagName, "-m", `Release ${tagName}`]);
+    tagNames.push(tagName);
+  }
+
+  return tagNames;
+}
+
+function getReleaseTargetVersion(releaseTarget: ReleaseTarget): string {
+  if (!releaseTarget.version) {
+    throw new Error(`Release target version missing for ${releaseTarget.workspaceName}`);
+  }
+
+  return releaseTarget.version;
 }
 
 try {

@@ -17,6 +17,18 @@ type TurnCompletedEvent = {
   };
 };
 
+type ErrorEvent = {
+  type: "error";
+  message?: string;
+};
+
+type TurnFailedEvent = {
+  type: "turn.failed";
+  error?: {
+    message?: string;
+  };
+};
+
 function isTurnCompletedEvent(event: Record<string, unknown>): event is TurnCompletedEvent {
   return event.type === "turn.completed";
 }
@@ -56,6 +68,21 @@ export function parseCodexEventLine(rawLine: string): Record<string, unknown> | 
   } catch {
     return null;
   }
+}
+
+export function isErrorEvent(event: Record<string, unknown>): event is ErrorEvent {
+  return event?.type === "error" && typeof event.message === "string" && event.message.length > 0;
+}
+
+export function isTurnFailedEvent(event: Record<string, unknown>): event is TurnFailedEvent {
+  return (
+    event?.type === "turn.failed" &&
+    typeof event.error === "object" &&
+    event.error !== null &&
+    "message" in event.error &&
+    typeof event.error.message === "string" &&
+    event.error.message.length > 0
+  );
 }
 
 export function isAgentMessageEvent(

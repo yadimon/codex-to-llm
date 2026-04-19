@@ -78,10 +78,14 @@ test("normalizeSpawnError provides targeted permission errors", () => {
   assert.match(error.message, /not executable/);
 });
 
-test("createCodexExitError prefers signal information over a generic success path", () => {
+test("createCodexExitError prefers stderr or parsed error messages over generic exit codes", () => {
   assert.equal(createCodexExitError(0, null, ""), undefined);
   assert.match(createCodexExitError(null, "SIGTERM", "")?.message || "", /signal SIGTERM/);
   assert.match(createCodexExitError(1, null, "")?.message || "", /code 1/);
+  assert.match(
+    createCodexExitError(1, null, "", "Incorrect API key provided")?.message || "",
+    /Incorrect API key provided/
+  );
 });
 
 test("runPrompt fails when the codex process exits due to a signal", async () => {

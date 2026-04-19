@@ -97,13 +97,15 @@ test("publish workflow keeps trusted publishing and package-specific tag guards"
   assert.match(publishWorkflow, /Verify tag matches server package version/);
 });
 
-test("release script keeps annotated tags, explicit pushes, and core-to-server sync", () => {
+test("release script keeps annotated tags, explicit pushes, and cascades core releases into server patch releases", () => {
   assert.match(releaseScript, /Working tree must be clean before creating a release commit/);
   assert.match(releaseScript, /runNpm\(\["run", "check"\]\)/);
   assert.match(releaseScript, /runNpm\(\["install", "--package-lock-only", "--ignore-scripts"\]\)/);
+  assert.match(releaseScript, /return \[\s*createReleaseTarget\(CORE_WORKSPACE, releaseBumpType, releaseTagPrefix\),/);
+  assert.match(releaseScript, /createReleaseTarget\(SERVER_WORKSPACE, "patch", "codex-to-llm-server"\)/);
   assert.match(releaseScript, /runGit\(\["tag", "-a", tagName, "-m", `Release \$\{tagName\}`\]\)/);
-  assert.match(releaseScript, /runGit\(\["push", "origin", "HEAD", tagName\]\)/);
-  assert.match(releaseScript, /if \(releaseWorkspace === "@yadimon\/codex-to-llm"\)/);
+  assert.match(releaseScript, /runGit\(\["push", "origin", "HEAD", \.\.\.tagNames\]\)/);
+  assert.match(releaseScript, /return `chore\(release\): \$\{summary\}`/);
   assert.match(releaseScript, /"@yadimon\/codex-to-llm": `\^\$\{corePackageJson\.version\}`/);
 });
 
