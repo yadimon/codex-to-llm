@@ -70,11 +70,15 @@ export function parseCodexEventLine(rawLine: string): Record<string, unknown> | 
   }
 }
 
-export function isErrorEvent(event: Record<string, unknown>): event is ErrorEvent {
+export function isErrorEvent(
+  event: Record<string, unknown>
+): event is ErrorEvent & { message: string } {
   return event?.type === "error" && typeof event.message === "string" && event.message.length > 0;
 }
 
-export function isTurnFailedEvent(event: Record<string, unknown>): event is TurnFailedEvent {
+export function isTurnFailedEvent(
+  event: Record<string, unknown>
+): event is TurnFailedEvent & { error: { message: string } } {
   return (
     event?.type === "turn.failed" &&
     typeof event.error === "object" &&
