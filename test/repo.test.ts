@@ -26,7 +26,7 @@ const workspaceTestScript = fs.readFileSync(
 );
 const healthCheck = fs.readFileSync(path.join(repoRoot, "health-check.md"), "utf8");
 const healthCheckProfile = fs.readFileSync(
-  path.join(repoRoot, "skills", "healthcheck", "skill-profile.md"),
+  path.join(repoRoot, "skills-data", "healthcheck", "skill-profile.md"),
   "utf8"
 );
 const lockfile = JSON.parse(
