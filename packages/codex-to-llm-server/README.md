@@ -100,6 +100,9 @@ curl http://127.0.0.1:3000/v1/responses \
 | `CODEX_TO_LLM_CLI_PATH` | `codex` | Path to the Codex CLI binary. |
 | `CODEX_TO_LLM_CONFIG_HOME` | temp dir | Temporary Codex config directory for a run. |
 | `CODEX_TO_LLM_WORKSPACE` | temp dir | Workspace directory used for Codex execution. |
+| `CODEX_TO_LLM_WEB_SEARCH` | `disabled` | Web search mode forwarded to the core runner. |
+| `CODEX_TO_LLM_IGNORE_RULES` | `false` | When truthy, pass `--ignore-rules` to the core runner. |
+| `CODEX_TO_LLM_IGNORE_USER_CONFIG` | `false` | When truthy, pass `--ignore-user-config` to the core runner. |
 | `CODEX_TO_LLM_REASONING_EFFORT` | `low` | Default reasoning effort passed to the core runner. |
 | `CODEX_TO_LLM_SANDBOX` | `read-only` | Default sandbox mode passed to the core runner. |
 
@@ -108,6 +111,7 @@ curl http://127.0.0.1:3000/v1/responses \
 - `GET /healthz` and `GET /v1/models` stay public even when bearer auth is configured
 - `POST /v1/responses` validates requested models against `CODEX_TO_LLM_SERVER_MODELS`
 - `max_output_tokens` and `reasoning.effort` are forwarded to the core runner
+- server CLI supports `--search`, `--web-search`, `--ignore-rules`, and `--ignore-user-config`
 - unsupported request fields such as `tools`, `tool_choice`, or `input_image` return `400`
 - the server owns prompt adaptation for `instructions` and multi-message dialog input before calling the raw core runner
 

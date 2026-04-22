@@ -8,7 +8,8 @@ import {
 import type {
   CoreResponse,
   RunOptions,
-  StreamEvent
+  StreamEvent,
+  WebSearchMode
 } from "@yadimon/codex-to-llm";
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -320,8 +321,44 @@ function defaultRunnerOptions(options: ServerOptions): RunOptions {
     configHome: options.configHome || process.env.CODEX_TO_LLM_CONFIG_HOME,
     cwd: options.cwd || process.env.CODEX_TO_LLM_WORKSPACE,
     reasoningEffort: options.reasoningEffort || process.env.CODEX_TO_LLM_REASONING_EFFORT,
-    sandbox: options.sandbox || process.env.CODEX_TO_LLM_SANDBOX
+    sandbox: options.sandbox || process.env.CODEX_TO_LLM_SANDBOX,
+    webSearch: options.webSearch ?? readWebSearchEnv("CODEX_TO_LLM_WEB_SEARCH"),
+    ignoreRules: options.ignoreRules ?? readBooleanEnv("CODEX_TO_LLM_IGNORE_RULES"),
+    ignoreUserConfig:
+      options.ignoreUserConfig ?? readBooleanEnv("CODEX_TO_LLM_IGNORE_USER_CONFIG")
   };
+}
+
+function readWebSearchEnv(name: string): WebSearchMode | undefined {
+  const value = process.env[name];
+  if (value == null || !value.trim()) {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "disabled" || normalized === "cached" || normalized === "live") {
+    return normalized;
+  }
+
+  throw new Error(`Invalid ${name}: expected disabled, cached, or live`);
+}
+
+function readBooleanEnv(name: string): boolean | undefined {
+  const value = process.env[name];
+  if (value == null || !value.trim()) {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  throw new Error(`Invalid ${name}: expected a boolean value`);
 }
 
 function resolveModels(options: ServerOptions): string[] {

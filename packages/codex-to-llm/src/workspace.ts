@@ -54,7 +54,6 @@ export function createCodexHome(options: { authPath?: string; configHome?: strin
     "[features]",
     "shell_snapshot = false",
     "unified_exec = false",
-    "steer = false",
     "multi_agent = false",
     "apps = false",
     "js_repl = false",

@@ -63,6 +63,10 @@ Supported CLI options:
 --input-file <path>
 --stream
 --json
+--search
+--web-search <disabled|cached|live>
+--ignore-rules
+--ignore-user-config
 --model <name>
 --reasoning-effort <level>
 --max-tokens <n>
@@ -75,15 +79,25 @@ Supported CLI options:
 
 ## Runtime Configuration
 
+The wrapper creates an isolated temporary `CODEX_HOME` and workspace by default. Its generated `config.toml` keeps web search disabled unless you opt in with `webSearch`, `--search`, `--web-search`, or `CODEX_TO_LLM_WEB_SEARCH`.
+
 | Variable | Default | Description |
 |---|---|---|
 | `CODEX_TO_LLM_AUTH_PATH` | `~/.codex/auth.json` | Path to the Codex auth file. |
 | `CODEX_TO_LLM_CLI_PATH` | `codex` | Path to the Codex CLI binary. |
+| `CODEX_TO_LLM_WEB_SEARCH` | `disabled` | Web search mode passed to Codex as `web_search`. |
+| `CODEX_TO_LLM_IGNORE_RULES` | `false` | When truthy, pass `--ignore-rules` to `codex exec`. |
+| `CODEX_TO_LLM_IGNORE_USER_CONFIG` | `false` | When truthy, pass `--ignore-user-config` to `codex exec`. |
 | `CODEX_TO_LLM_REASONING_EFFORT` | `low` | Default reasoning effort passed to Codex. |
 | `CODEX_TO_LLM_SANDBOX` | `read-only` | Sandbox mode passed to Codex. |
 | `CODEX_TO_LLM_CONFIG_HOME` | temp dir | Temporary Codex config directory for a run. |
 | `CODEX_TO_LLM_WORKSPACE` | temp dir | Workspace directory passed to Codex. |
 | `CODEX_TO_LLM_LOCAL_HOME` | `.codex-to-llm/` | Local directory used by the auth copy helper. |
+
+Notes:
+
+- `--search` is shorthand for `--web-search live`.
+- `--ignore-user-config` still uses `CODEX_HOME` for auth, but it skips the generated `config.toml`.
 
 ## Development
 

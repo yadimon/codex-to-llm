@@ -8,7 +8,7 @@ import {
   runPrompt,
   streamPrompt
 } from "./index.js";
-import type { RunOptions } from "./types.js";
+import type { RunOptions, WebSearchMode } from "./types.js";
 
 const args = process.argv.slice(2);
 const { getArg, hasFlag } = createCliArgReader(args);
@@ -29,6 +29,10 @@ Options:
   --reasoning-effort <level>
   --max-tokens <n>
   --sandbox <mode>
+  --search
+  --web-search <disabled|cached|live>
+  --ignore-rules
+  --ignore-user-config
   --auth-path <path>
   --config-home <path>
   --cwd <path>
@@ -67,16 +71,33 @@ async function readCliInput(): Promise<string> {
 
 function buildRunOptions(): RunOptions {
   const maxTokensArg = getArg("--max-tokens");
+  const webSearchArg = parseWebSearchArg(getArg("--web-search"));
+
   return {
     model: getArg("--model"),
     reasoningEffort: getArg("--reasoning-effort"),
     maxTokens: maxTokensArg ? Number.parseInt(maxTokensArg, 10) : undefined,
     sandbox: getArg("--sandbox"),
+    webSearch: webSearchArg || (hasFlag("--search") ? "live" : undefined),
+    ignoreRules: hasFlag("--ignore-rules"),
+    ignoreUserConfig: hasFlag("--ignore-user-config"),
     authPath: getArg("--auth-path"),
     configHome: getArg("--config-home"),
     cwd: getArg("--cwd"),
     cliPath: getArg("--cli")
   };
+}
+
+function parseWebSearchArg(value: string | undefined): WebSearchMode | undefined {
+  if (value == null) {
+    return undefined;
+  }
+
+  if (value === "disabled" || value === "cached" || value === "live") {
+    return value;
+  }
+
+  throw new Error('Invalid --web-search: expected "disabled", "cached", or "live"');
 }
 export async function main(): Promise<void> {
   if (hasFlag("--help") || hasFlag("-h")) {

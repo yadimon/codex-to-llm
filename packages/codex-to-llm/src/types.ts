@@ -2,6 +2,9 @@ export const DEFAULT_MODEL = "gpt-5.3-codex-spark";
 export const DEFAULT_REASONING_EFFORT = "low";
 export const DEFAULT_MAX_TOKENS = 64;
 export const DEFAULT_SANDBOX = "read-only";
+export const DEFAULT_WEB_SEARCH = "disabled";
+
+export type WebSearchMode = "disabled" | "cached" | "live";
 
 export interface RunOptions {
   model?: string;
@@ -14,6 +17,9 @@ export interface RunOptions {
   configHome?: string;
   cwd?: string;
   responseId?: string;
+  webSearch?: WebSearchMode | boolean;
+  ignoreRules?: boolean;
+  ignoreUserConfig?: boolean;
 }
 
 export interface NormalizedRunOptions {
@@ -23,6 +29,9 @@ export interface NormalizedRunOptions {
   timeoutMs: number;
   sandbox: string;
   cliPath: string;
+  webSearch: WebSearchMode;
+  ignoreRules: boolean;
+  ignoreUserConfig: boolean;
 }
 
 export interface UsageSummary {

@@ -45,10 +45,12 @@ test("createCodexHome writes auth and config files", () => {
     authPath: sourceAuth,
     configHome
   });
+  const configToml = fs.readFileSync(path.join(configHome, "config.toml"), "utf8");
 
   assert.equal(createdHome, configHome);
   assert.equal(fs.readFileSync(path.join(configHome, "auth.json"), "utf8"), "{\"token\":\"x\"}\n");
-  assert.match(fs.readFileSync(path.join(configHome, "config.toml"), "utf8"), /web_search = "disabled"/);
+  assert.match(configToml, /web_search = "disabled"/);
+  assert.doesNotMatch(configToml, /steer = false/);
 
   cleanupDirectory(sourceDir, true);
   cleanupDirectory(configHome, true);

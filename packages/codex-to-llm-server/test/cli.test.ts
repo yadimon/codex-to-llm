@@ -7,6 +7,10 @@ test("CLI help documents host and auth flags", () => {
   assert.match(HELP_TEXT, /codex-to-llm-server/);
   assert.match(HELP_TEXT, /--host <host>/);
   assert.match(HELP_TEXT, /--api-key <value>/);
+  assert.match(HELP_TEXT, /--search/);
+  assert.match(HELP_TEXT, /--web-search <disabled\|cached\|live>/);
+  assert.match(HELP_TEXT, /--ignore-rules/);
+  assert.match(HELP_TEXT, /--ignore-user-config/);
 });
 
 test("CLI exits with code 1 for an invalid port", () => {

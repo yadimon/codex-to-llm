@@ -20,7 +20,9 @@ import {
   DEFAULT_MAX_TOKENS,
   DEFAULT_MODEL,
   DEFAULT_REASONING_EFFORT,
-  DEFAULT_SANDBOX
+  DEFAULT_SANDBOX,
+  DEFAULT_WEB_SEARCH,
+  type WebSearchMode
 } from "./types.js";
 import type {
   CoreResponse,
@@ -70,7 +72,17 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
   }
 
   const normalizedOptions = normalizeRunOptions(options);
-  const { model, reasoningEffort, maxTokens, sandbox, timeoutMs, cliPath } = normalizedOptions;
+  const {
+    model,
+    reasoningEffort,
+    maxTokens,
+    sandbox,
+    timeoutMs,
+    cliPath,
+    webSearch,
+    ignoreRules,
+    ignoreUserConfig
+  } = normalizedOptions;
   assertCliPathExists(cliPath);
   const ownsWorkspace = !options.cwd;
   const ownsCodexHome = !options.configHome;
@@ -103,6 +115,8 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
 
   const cliArgs = [
     "exec",
+    ...(ignoreUserConfig ? ["--ignore-user-config"] : []),
+    ...(ignoreRules ? ["--ignore-rules"] : []),
     "--json",
     "--color",
     "never",
@@ -128,6 +142,8 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
     `model_reasoning_effort="${reasoningEffort}"`,
     "-c",
     `model_max_output_tokens=${maxTokens}`,
+    "-c",
+    `web_search="${webSearch}"`,
     "-"
   ];
 
@@ -325,7 +341,18 @@ export function normalizeRunOptions(options: RunOptions = {}): NormalizedRunOpti
     maxTokens: normalizeMaxTokens(options.maxTokens),
     sandbox: normalizeCliToken(options.sandbox, DEFAULT_SANDBOX, "sandbox"),
     timeoutMs: normalizeTimeout(options.timeout),
-    cliPath: normalizeCliPath(options.cliPath)
+    cliPath: normalizeCliPath(options.cliPath),
+    webSearch: normalizeWebSearch(options.webSearch, process.env.CODEX_TO_LLM_WEB_SEARCH),
+    ignoreRules: normalizeBooleanOption(
+      options.ignoreRules,
+      process.env.CODEX_TO_LLM_IGNORE_RULES,
+      "ignoreRules"
+    ),
+    ignoreUserConfig: normalizeBooleanOption(
+      options.ignoreUserConfig,
+      process.env.CODEX_TO_LLM_IGNORE_USER_CONFIG,
+      "ignoreUserConfig"
+    )
   };
 }
 
@@ -347,6 +374,51 @@ function normalizeCliToken(value: string | undefined, fallback: string, fieldNam
   }
 
   return normalized;
+}
+
+function normalizeWebSearch(
+  value: RunOptions["webSearch"],
+  envValue: string | undefined
+): WebSearchMode {
+  if (typeof value === "boolean") {
+    return value ? "live" : "disabled";
+  }
+
+  const normalized =
+    value ||
+    (typeof envValue === "string" && envValue.trim() ? envValue.trim().toLowerCase() : undefined) ||
+    DEFAULT_WEB_SEARCH;
+
+  if (normalized === "disabled" || normalized === "cached" || normalized === "live") {
+    return normalized;
+  }
+
+  throw new Error('Invalid webSearch: expected "disabled", "cached", or "live"');
+}
+
+function normalizeBooleanOption(
+  value: boolean | undefined,
+  envValue: string | undefined,
+  fieldName: string
+): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (envValue == null || !envValue.trim()) {
+    return false;
+  }
+
+  const normalized = envValue.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  throw new Error(`Invalid ${fieldName}: expected a boolean value`);
 }
 
 function normalizeTimeout(value: number | undefined): number {

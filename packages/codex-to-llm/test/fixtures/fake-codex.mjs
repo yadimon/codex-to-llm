@@ -26,6 +26,21 @@ process.stdin.on("end", () => {
     return;
   }
 
+  if (process.env.FAKE_CODEX_CAPTURE_FILE) {
+    fs.writeFileSync(
+      process.env.FAKE_CODEX_CAPTURE_FILE,
+      JSON.stringify(
+        {
+          args,
+          codexHome: process.env.CODEX_HOME || null
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+  }
+
   const trimmed = stdin.trim();
   const message = fs.existsSync(process.env.FAKE_CODEX_RESPONSE_FILE || "")
     ? fs.readFileSync(process.env.FAKE_CODEX_RESPONSE_FILE, "utf8").trim()

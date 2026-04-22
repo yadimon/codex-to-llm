@@ -28,6 +28,10 @@ test("normalizeRunOptions rejects invalid CLI-facing values", () => {
     () => normalizeRunOptions({ sandbox: "workspace write" }),
     /Invalid sandbox/
   );
+  assert.throws(
+    () => normalizeRunOptions({ webSearch: "fast" as "live" }),
+    /Invalid webSearch/
+  );
 });
 
 test("normalizeRunOptions rejects invalid timeout values", () => {
@@ -68,6 +72,49 @@ test("normalizeRunOptions resolves cliPath from explicit options and environment
       delete process.env.CODEX_TO_LLM_CLI_PATH;
     } else {
       process.env.CODEX_TO_LLM_CLI_PATH = previousCliPath;
+    }
+  }
+});
+
+test("normalizeRunOptions resolves web search and ignore flags from options and environment", () => {
+  const previousWebSearch = process.env.CODEX_TO_LLM_WEB_SEARCH;
+  const previousIgnoreRules = process.env.CODEX_TO_LLM_IGNORE_RULES;
+  const previousIgnoreUserConfig = process.env.CODEX_TO_LLM_IGNORE_USER_CONFIG;
+  process.env.CODEX_TO_LLM_WEB_SEARCH = "cached";
+  process.env.CODEX_TO_LLM_IGNORE_RULES = "true";
+  process.env.CODEX_TO_LLM_IGNORE_USER_CONFIG = "1";
+
+  try {
+    const fromEnv = normalizeRunOptions({});
+    assert.equal(fromEnv.webSearch, "cached");
+    assert.equal(fromEnv.ignoreRules, true);
+    assert.equal(fromEnv.ignoreUserConfig, true);
+
+    const fromOptions = normalizeRunOptions({
+      webSearch: true,
+      ignoreRules: false,
+      ignoreUserConfig: false
+    });
+    assert.equal(fromOptions.webSearch, "live");
+    assert.equal(fromOptions.ignoreRules, false);
+    assert.equal(fromOptions.ignoreUserConfig, false);
+  } finally {
+    if (previousWebSearch == null) {
+      delete process.env.CODEX_TO_LLM_WEB_SEARCH;
+    } else {
+      process.env.CODEX_TO_LLM_WEB_SEARCH = previousWebSearch;
+    }
+
+    if (previousIgnoreRules == null) {
+      delete process.env.CODEX_TO_LLM_IGNORE_RULES;
+    } else {
+      process.env.CODEX_TO_LLM_IGNORE_RULES = previousIgnoreRules;
+    }
+
+    if (previousIgnoreUserConfig == null) {
+      delete process.env.CODEX_TO_LLM_IGNORE_USER_CONFIG;
+    } else {
+      process.env.CODEX_TO_LLM_IGNORE_USER_CONFIG = previousIgnoreUserConfig;
     }
   }
 });
@@ -122,6 +169,57 @@ test("runPrompt fails when the codex process exits due to a signal", async () =>
     } else {
       process.env.FAKE_CODEX_TERMINATE_SIGNAL = previousSignal;
     }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("runPrompt forwards web search and ignore flags to codex exec", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-forward-"));
+  const authPath = path.join(tempDir, "auth.json");
+  const capturePath = path.join(tempDir, "capture.json");
+  const fixturePath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "./fixtures/fake-codex.mjs"
+  );
+  const cliPath =
+    process.platform === "win32"
+      ? path.join(tempDir, "fake-codex.cmd")
+      : fixturePath;
+
+  fs.writeFileSync(authPath, JSON.stringify({ access_token: "test-token" }), "utf8");
+  if (process.platform === "win32") {
+    fs.writeFileSync(cliPath, `@echo off\r\n"${process.execPath}" "${fixturePath}" %*\r\n`, "utf8");
+  }
+
+  const previousCapturePath = process.env.FAKE_CODEX_CAPTURE_FILE;
+  process.env.FAKE_CODEX_CAPTURE_FILE = capturePath;
+
+  try {
+    const response = await runPrompt("Hello", {
+      authPath,
+      cliPath,
+      timeout: 5000,
+      webSearch: "live",
+      ignoreRules: true,
+      ignoreUserConfig: true
+    });
+    const capture = JSON.parse(fs.readFileSync(capturePath, "utf8")) as {
+      args: string[];
+      codexHome: string | null;
+    };
+
+    assert.equal(response.content, "FAKE:Hello");
+    assert.ok(capture.args.includes("--ignore-rules"));
+    assert.ok(capture.args.includes("--ignore-user-config"));
+    assert.ok(capture.args.some(arg => arg.includes("web_search") && arg.includes("live")));
+    assert.ok(capture.codexHome);
+  } finally {
+    if (previousCapturePath == null) {
+      delete process.env.FAKE_CODEX_CAPTURE_FILE;
+    } else {
+      process.env.FAKE_CODEX_CAPTURE_FILE = previousCapturePath;
+    }
+
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });

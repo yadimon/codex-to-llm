@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCliArgReader } from "@yadimon/codex-to-llm";
+import type { WebSearchMode } from "@yadimon/codex-to-llm";
 import { startServer } from "./index.js";
 
 const args = process.argv.slice(2);
@@ -18,6 +19,10 @@ Options:
   --port <port>
   --model <name>
   --api-key <value>
+  --search
+  --web-search <disabled|cached|live>
+  --ignore-rules
+  --ignore-user-config
   --auth-path <path>
   --config-home <path>
   --cwd <path>
@@ -36,6 +41,9 @@ export async function main(): Promise<void> {
     port,
     defaultModel: getArg("--model"),
     apiKey: getArg("--api-key"),
+    webSearch: parseWebSearchArg(getArg("--web-search")) || (hasFlag("--search") ? "live" : undefined),
+    ignoreRules: hasFlag("--ignore-rules"),
+    ignoreUserConfig: hasFlag("--ignore-user-config"),
     authPath: getArg("--auth-path"),
     configHome: getArg("--config-home"),
     cwd: getArg("--cwd"),
@@ -56,6 +64,18 @@ function parsePort(portArg: string | undefined): number | undefined {
   }
 
   return port;
+}
+
+function parseWebSearchArg(value: string | undefined): WebSearchMode | undefined {
+  if (value == null) {
+    return undefined;
+  }
+
+  if (value === "disabled" || value === "cached" || value === "live") {
+    return value;
+  }
+
+  throw new Error('Invalid --web-search: expected "disabled", "cached", or "live"');
 }
 
 const modulePath = fs.realpathSync.native(fileURLToPath(import.meta.url));
