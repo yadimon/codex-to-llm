@@ -31,7 +31,7 @@
     "smoke:server": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server smoke"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^24.9.1",
     "eslint": "^9.39.1",
     "globals": "^16.4.0",
