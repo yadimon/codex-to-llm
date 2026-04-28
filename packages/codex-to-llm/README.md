@@ -97,7 +97,7 @@ The wrapper creates an isolated temporary `CODEX_HOME` and workspace by default.
 Notes:
 
 - `--search` is shorthand for `--web-search live`.
-- `--ignore-user-config` still uses `CODEX_HOME` for auth, but it skips the generated `config.toml`.
+- `--ignore-user-config` keeps `CODEX_HOME` for auth, but tells Codex to skip the per-run `config.toml` this wrapper writes there. That config is what disables web search, MCP, the shell tool, multi-agent, and the other defaults in this package, so enabling the flag also bypasses that hardening. Use it only when you explicitly need raw Codex behavior.
 
 ## Development
 

@@ -114,6 +114,8 @@ curl http://127.0.0.1:3000/v1/responses \
 - server CLI supports `--search`, `--web-search`, `--ignore-rules`, and `--ignore-user-config`
 - unsupported request fields such as `tools`, `tool_choice`, or `input_image` return `400`
 - the server owns prompt adaptation for `instructions` and multi-message dialog input before calling the raw core runner
+- streaming emits one `response.output_text.delta` per Codex `agent_message`, not per token; clients expecting token-level deltas will see one large delta followed by `response.completed`
+- multi-message dialog input is flattened into a single text prompt with `### role` headers; user-supplied content is not escaped, so a message that mimics those headers is observable in the prompt the model receives. Validate untrusted input upstream before forwarding it
 
 ## Docker
 
