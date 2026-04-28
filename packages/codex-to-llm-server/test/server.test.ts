@@ -448,6 +448,43 @@ test("server rejects oversized request bodies", async () => {
   }
 });
 
+test("mock-mode SSE emits response.created before any content event", async () => {
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    models: ["gpt-5.3-codex-spark"],
+    mockMode: true
+  });
+
+  try {
+    const response = await fetch(`${started.url}/v1/responses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        stream: true,
+        model: "gpt-5.3-codex-spark",
+        input: "Hello"
+      })
+    });
+    const text = await response.text();
+    const createdIdx = text.indexOf("event: response.created");
+    const deltaIdx = text.indexOf("event: response.output_text.delta");
+    const completedIdx = text.indexOf("event: response.completed");
+
+    assert.equal(response.status, 200);
+    assert.notEqual(createdIdx, -1);
+    assert.notEqual(deltaIdx, -1);
+    assert.notEqual(completedIdx, -1);
+    assert.ok(createdIdx < deltaIdx);
+    assert.ok(deltaIdx < completedIdx);
+    assert.match(text, /data: \[DONE\]/);
+  } finally {
+    await started.close();
+  }
+});
+
 test("startServer rejects invalid configured ports before listen", async () => {
   await assert.rejects(
     startServer({

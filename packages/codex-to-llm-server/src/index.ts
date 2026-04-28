@@ -238,12 +238,6 @@ function createMockRunner(options: ServerOptions): Runner {
     },
     async *streamPrompt(prompt, requestOptions = {}) {
       const response = buildMockCoreResponse(prompt, requestOptions, options);
-      for (const event of response.raw.events) {
-        yield {
-          type: "response.raw_event",
-          event
-        } satisfies StreamEvent;
-      }
       yield {
         type: "response.started",
         response: {
@@ -253,6 +247,12 @@ function createMockRunner(options: ServerOptions): Runner {
           createdAt: response.createdAt
         }
       };
+      for (const event of response.raw.events) {
+        yield {
+          type: "response.raw_event",
+          event
+        } satisfies StreamEvent;
+      }
       yield {
         type: "response.output_text.delta",
         delta: response.content
