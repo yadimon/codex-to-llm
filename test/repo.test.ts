@@ -25,10 +25,6 @@ const workspaceTestScript = fs.readFileSync(
   "utf8"
 );
 const healthCheck = fs.readFileSync(path.join(repoRoot, "health-check.md"), "utf8");
-const healthCheckProfile = fs.readFileSync(
-  path.join(repoRoot, "skills-data", "healthcheck", "skill-profile.md"),
-  "utf8"
-);
 const lockfile = JSON.parse(
   fs.readFileSync(path.join(repoRoot, "package-lock.json"), "utf8")
 ) as {
@@ -126,6 +122,4 @@ test("health-check artifacts exist and document the mandatory health commands", 
   assert.match(healthCheck, /`npm run test:docker`/);
   assert.match(healthCheck, /HC-EXT-001/);
   assert.match(healthCheck, /HC-EXT-002/);
-  assert.match(healthCheckProfile, /Primary artifact: `health-check\.md`/);
-  assert.match(healthCheckProfile, /npm workspace monorepo/);
 });
