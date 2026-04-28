@@ -65,9 +65,12 @@ export function createCodexHome(options: { authPath?: string; configHome?: strin
 }
 
 export function createWorkspace(workspacePath?: string): string {
-  const rootDir = workspacePath || fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-workspace-"));
-  fs.mkdirSync(rootDir, { recursive: true });
-  return rootDir;
+  if (!workspacePath) {
+    return fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-workspace-"));
+  }
+
+  fs.mkdirSync(workspacePath, { recursive: true });
+  return workspacePath;
 }
 
 export function cleanupDirectory(directoryPath: string | undefined, shouldCleanup: boolean): void {
