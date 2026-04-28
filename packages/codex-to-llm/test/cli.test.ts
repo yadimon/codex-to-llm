@@ -23,3 +23,17 @@ test("CLI exits with code 1 and prints an error when input is missing", () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Prompt input is required/);
 });
+
+test("CLI exits with code 1 for an invalid --web-search value", () => {
+  const result = spawnSync(
+    process.execPath,
+    ["--import", "tsx/esm", "./src/cli.ts", "--prompt", "Hi", "--web-search", "fast"],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8"
+    }
+  );
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Invalid --web-search/);
+});
