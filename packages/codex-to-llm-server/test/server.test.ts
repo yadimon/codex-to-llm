@@ -547,6 +547,33 @@ test("SSE: client disconnect aborts the runner stream", async () => {
   }
 });
 
+test("rejects unknown input object shapes with 400", async () => {
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    runner: createStubRunner()
+  });
+  try {
+    const cases: Array<{ body: unknown; expect: RegExp }> = [
+      { body: { input: { foo: 1 } }, expect: /must contain 'messages' or 'input'/ },
+      { body: { input: { input: { nested: true } } }, expect: /must be a string or an array/ },
+      { body: { input: 42 }, expect: /must be a string, a message array/ }
+    ];
+    for (const { body, expect } of cases) {
+      const response = await fetch(`${started.url}/v1/responses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      assert.equal(response.status, 400, `expected 400 for ${JSON.stringify(body)}`);
+      const text = await response.text();
+      assert.match(text, expect);
+    }
+  } finally {
+    await started.close();
+  }
+});
+
 test("createServer rejects empty models array at startup", () => {
   assert.throws(
     () => createServer({ models: [], runner: createStubRunner() }),

@@ -695,20 +695,17 @@ function normalizeServerPromptInput(input: ServerPromptInput): {
     }
 
     if (source.input != null) {
-      messages.push(
-        ...normalizeMessageEntries(
-          typeof source.input === "string" || Array.isArray(source.input)
-            ? source.input
-            : JSON.stringify(source.input),
-          "user"
-        )
-      );
+      if (typeof source.input !== "string" && !Array.isArray(source.input)) {
+        throw createHttpError(400, "input.input must be a string or an array of messages");
+      }
+      messages.push(...normalizeMessageEntries(source.input, "user"));
+    }
+
+    if (source.messages == null && source.input == null) {
+      throw createHttpError(400, "input object must contain 'messages' or 'input'");
     }
   } else {
-    messages.push({
-      role: "user",
-      content: normalizeText(JSON.stringify(source ?? ""), "input")
-    });
+    throw createHttpError(400, "input must be a string, a message array, or { messages, input }");
   }
 
   if (messages.length === 0) {
