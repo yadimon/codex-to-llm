@@ -3,6 +3,10 @@ import * as path from "node:path";
 import { run } from "node:test";
 import { spec } from "node:test/reporters";
 
+if (process.env.CODEX_TO_LLM_SERVER_LOG == null) {
+  process.env.CODEX_TO_LLM_SERVER_LOG = "off";
+}
+
 const packageRoot = process.cwd();
 const testDir = path.join(packageRoot, "test");
 const testFiles = fs

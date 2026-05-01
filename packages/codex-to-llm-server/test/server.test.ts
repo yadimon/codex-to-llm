@@ -626,6 +626,57 @@ test("createServer trims whitespace in configured models", async () => {
   }
 });
 
+test("emits a structured JSON log per successful request", async () => {
+  const previous = process.env.CODEX_TO_LLM_SERVER_LOG;
+  process.env.CODEX_TO_LLM_SERVER_LOG = "on";
+  const captured: string[] = [];
+  const origWrite = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
+    captured.push(String(chunk));
+    return origWrite(chunk as string, ...(rest as []));
+  }) as typeof process.stdout.write;
+
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    runner: createStubRunner()
+  });
+  try {
+    await fetch(`${started.url}/v1/responses`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.3-codex-spark", input: "Hello" })
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+  } finally {
+    await started.close();
+    process.stdout.write = origWrite;
+    if (previous == null) {
+      delete process.env.CODEX_TO_LLM_SERVER_LOG;
+    } else {
+      process.env.CODEX_TO_LLM_SERVER_LOG = previous;
+    }
+  }
+
+  const records = captured
+    .filter(c => c.startsWith("{"))
+    .flatMap(c => c.split("\n").filter(Boolean))
+    .map(line => {
+      try {
+        return JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    })
+    .filter((r): r is Record<string, unknown> => r != null);
+  const requestLog = records.find(r => r.msg === "request" && r.route === "POST /v1/responses");
+  assert.ok(requestLog, "expected a request log entry");
+  assert.equal(requestLog!.status, 200);
+  assert.equal(requestLog!.model, "gpt-5.3-codex-spark");
+  assert.equal(typeof requestLog!.latency_ms, "number");
+  assert.match(String(requestLog!.req_id), /^req_/);
+});
+
 test("startServer rejects invalid configured ports before listen", async () => {
   await assert.rejects(
     startServer({
