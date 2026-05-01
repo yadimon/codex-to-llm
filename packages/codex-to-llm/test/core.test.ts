@@ -251,6 +251,51 @@ test("runPrompt rejects immediately if signal is already aborted", async () => {
   }
 });
 
+test("runPrompt escalates termination when codex ignores SIGTERM", { skip: process.platform === "win32" }, async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-escalate-"));
+  const authPath = path.join(tempDir, "auth.json");
+  const fixturePath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "./fixtures/fake-codex.mjs"
+  );
+
+  fs.writeFileSync(authPath, JSON.stringify({ access_token: "test-token" }), "utf8");
+
+  const previousHang = process.env.FAKE_CODEX_HANG;
+  const previousIgnore = process.env.FAKE_CODEX_IGNORE_SIGTERM;
+  process.env.FAKE_CODEX_HANG = "1";
+  process.env.FAKE_CODEX_IGNORE_SIGTERM = "1";
+
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 50);
+  const start = Date.now();
+
+  try {
+    await assert.rejects(
+      runPrompt("Hello", {
+        authPath,
+        cliPath: fixturePath,
+        timeout: 30_000,
+        signal: controller.signal
+      })
+    );
+    const elapsed = Date.now() - start;
+    assert(elapsed < 4000, `escalation should complete within grace, got ${elapsed}ms`);
+  } finally {
+    if (previousHang == null) {
+      delete process.env.FAKE_CODEX_HANG;
+    } else {
+      process.env.FAKE_CODEX_HANG = previousHang;
+    }
+    if (previousIgnore == null) {
+      delete process.env.FAKE_CODEX_IGNORE_SIGTERM;
+    } else {
+      process.env.FAKE_CODEX_IGNORE_SIGTERM = previousIgnore;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("runPrompt forwards web search and ignore flags to codex exec", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-forward-"));
   const authPath = path.join(tempDir, "auth.json");

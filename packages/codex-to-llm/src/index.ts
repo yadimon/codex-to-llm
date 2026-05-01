@@ -5,4 +5,5 @@ export * from "./queue.js";
 export * from "./platform.js";
 export * from "./workspace.js";
 export * from "./parse.js";
+export * from "./lifecycle.js";
 export * from "./runner.js";

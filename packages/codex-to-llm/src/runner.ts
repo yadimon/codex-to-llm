@@ -16,6 +16,7 @@ import {
   createWorkspace,
   cleanupDirectory
 } from "./workspace.js";
+import { terminate } from "./lifecycle.js";
 import {
   DEFAULT_MAX_TOKENS,
   DEFAULT_MODEL,
@@ -226,20 +227,25 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
     settled = true;
     clearTimeout(timeoutHandle);
     signal?.removeEventListener("abort", onAbort);
-    if (!child.killed) {
-      child.kill();
-    }
     flushStdoutBuffer();
 
-    cleanupDirectory(workspace, ownsWorkspace);
-    cleanupDirectory(codexHome, ownsCodexHome);
     queue.push({
       type: "response.failed",
       error: {
         message: error.message
       }
     });
-    queue.fail(error);
+
+    void terminate(child).catch(terminationError => {
+      const reason = terminationError instanceof Error
+        ? terminationError.message
+        : String(terminationError);
+      error.message = `${error.message} (termination failed: ${reason})`;
+    }).finally(() => {
+      cleanupDirectory(workspace, ownsWorkspace);
+      cleanupDirectory(codexHome, ownsCodexHome);
+      queue.fail(error);
+    });
   }
 
   function flushStdoutBuffer(): void {
