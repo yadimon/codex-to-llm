@@ -112,7 +112,7 @@ export function createServer(options: ServerOptions = {}) {
         const runOptions = requestToRunOptions(body, options);
 
         if (body.stream) {
-          await streamOpenAIResponse(response, runner, prompt, runOptions);
+          await streamOpenAIResponse(request, response, runner, prompt, runOptions);
           return;
         }
 
@@ -459,6 +459,7 @@ function validateMaxOutputTokens(maxOutputTokens: number | undefined): void {
 }
 
 async function streamOpenAIResponse(
+  request: IncomingMessage,
   response: ServerResponse,
   runner: Runner,
   prompt: string,
@@ -469,11 +470,23 @@ async function streamOpenAIResponse(
   response.setHeader("Cache-Control", "no-cache, no-transform");
   response.setHeader("Connection", "keep-alive");
 
+  const controller = new AbortController();
+  const onClientGone = () => controller.abort(new Error("Client disconnected"));
+  request.once("close", onClientGone);
+  response.once("close", onClientGone);
+
   let finalResponse;
   let hasError = false;
 
   try {
-    for await (const event of runner.streamPrompt(prompt, runOptions)) {
+    for await (const event of runner.streamPrompt(prompt, {
+      ...runOptions,
+      signal: controller.signal
+    })) {
+      if (controller.signal.aborted) {
+        break;
+      }
+
       if (event.type === "response.started" && event.response) {
         writeSse(response, "response.created", {
           id: event.response.id,
@@ -501,11 +514,20 @@ async function streamOpenAIResponse(
     }
   } catch (error) {
     hasError = true;
-    writeSse(
-      response,
-      "response.failed",
-      createErrorBody("server_error", error instanceof Error ? error.message : String(error))
-    );
+    if (!controller.signal.aborted && !response.writableEnded) {
+      writeSse(
+        response,
+        "response.failed",
+        createErrorBody("server_error", error instanceof Error ? error.message : String(error))
+      );
+    }
+  } finally {
+    request.off("close", onClientGone);
+    response.off("close", onClientGone);
+  }
+
+  if (controller.signal.aborted) {
+    return finalResponse;
   }
 
   if (!hasError && !finalResponse) {
@@ -520,7 +542,9 @@ async function streamOpenAIResponse(
   if (!hasError) {
     response.write("data: [DONE]\n\n");
   }
-  response.end();
+  if (!response.writableEnded) {
+    response.end();
+  }
 
   return finalResponse;
 }

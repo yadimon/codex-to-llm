@@ -485,6 +485,67 @@ test("mock-mode SSE emits response.created before any content event", async () =
   }
 });
 
+test("SSE: client disconnect aborts the runner stream", async () => {
+  let observedSignal: AbortSignal | undefined;
+  const aborts: string[] = [];
+
+  const stub = {
+    async runPrompt() {
+      throw new Error("not used");
+    },
+    async *streamPrompt(_: string, opts: RunOptions = {}): AsyncGenerator<StreamEvent> {
+      observedSignal = opts.signal;
+      yield {
+        type: "response.started",
+        response: {
+          id: "resp_abort",
+          model: "gpt-5.3-codex-spark",
+          prompt: "Hello",
+          createdAt: 1
+        }
+      };
+      yield { type: "response.output_text.delta", delta: "first" };
+      await new Promise<void>((_, reject) => {
+        opts.signal?.addEventListener("abort", () => {
+          aborts.push("aborted");
+          reject(new Error("aborted"));
+        });
+      });
+    }
+  };
+
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    runner: stub
+  });
+
+  try {
+    const controller = new AbortController();
+    const responsePromise = fetch(`${started.url}/v1/responses`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stream: true, input: "Hello" }),
+      signal: controller.signal
+    });
+    const response = await responsePromise;
+    const reader = response.body!.getReader();
+    await reader.read();
+    controller.abort();
+    try {
+      await reader.cancel();
+    } catch {
+      // expected
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal(aborts.length, 1, "runner should observe abort");
+    assert.ok(observedSignal, "stub should receive an AbortSignal");
+    assert.equal(observedSignal!.aborted, true);
+  } finally {
+    await started.close();
+  }
+});
+
 test("startServer rejects invalid configured ports before listen", async () => {
   await assert.rejects(
     startServer({
