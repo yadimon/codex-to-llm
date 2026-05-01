@@ -1,4 +1,5 @@
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { once } from "node:events";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import {
   DEFAULT_MODEL,
@@ -78,6 +79,7 @@ type ResponsesInput =
       input?: string | ConversationMessageInput[];
       messages?: ConversationMessageInput[];
     };
+const SSE_KEEPALIVE_MS = 15_000;
 const VALID_REASONING_EFFORTS = new Set(["low", "medium", "high"]);
 const SUPPORTED_ROLES = new Set<MessageRole>(["system", "developer", "user", "assistant"]);
 const TEXT_BLOCK_TYPES = new Set<MessageTextBlock["type"]>(["text", "input_text", "output_text"]);
@@ -481,7 +483,8 @@ async function streamOpenAIResponse(
   response: ServerResponse,
   runner: Runner,
   prompt: string,
-  runOptions: RunOptions
+  runOptions: RunOptions,
+  keepaliveMs: number = SSE_KEEPALIVE_MS
 ) {
   response.statusCode = 200;
   response.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -493,8 +496,25 @@ async function streamOpenAIResponse(
   request.once("close", onClientGone);
   response.once("close", onClientGone);
 
+  let lastByteAt = Date.now();
+  const ping = setInterval(() => {
+    if (response.writableEnded) {
+      return;
+    }
+    if (Date.now() - lastByteAt < keepaliveMs) {
+      return;
+    }
+    response.write(": ping\n\n");
+    lastByteAt = Date.now();
+  }, keepaliveMs);
+
   let finalResponse;
   let hasError = false;
+
+  const send = async (eventName: string, data: unknown) => {
+    await writeSse(response, eventName, data);
+    lastByteAt = Date.now();
+  };
 
   try {
     for await (const event of runner.streamPrompt(prompt, {
@@ -506,7 +526,7 @@ async function streamOpenAIResponse(
       }
 
       if (event.type === "response.started" && event.response) {
-        writeSse(response, "response.created", {
+        await send("response.created", {
           id: event.response.id,
           model: event.response.model,
           object: "response",
@@ -516,30 +536,26 @@ async function streamOpenAIResponse(
       }
 
       if (event.type === "response.output_text.delta") {
-        writeSse(response, "response.output_text.delta", {
-          delta: event.delta
-        });
+        await send("response.output_text.delta", { delta: event.delta });
         continue;
       }
 
       if (event.type === "response.completed" && event.response) {
         finalResponse = buildOpenAIResponse(event.response);
-        writeSse(response, "response.output_text.done", {
-          text: event.response.content
-        });
-        writeSse(response, "response.completed", finalResponse);
+        await send("response.output_text.done", { text: event.response.content });
+        await send("response.completed", finalResponse);
       }
     }
   } catch (error) {
     hasError = true;
     if (!controller.signal.aborted && !response.writableEnded) {
-      writeSse(
-        response,
+      await send(
         "response.failed",
         createErrorBody("server_error", error instanceof Error ? error.message : String(error))
       );
     }
   } finally {
+    clearInterval(ping);
     request.off("close", onClientGone);
     response.off("close", onClientGone);
   }
@@ -550,14 +566,13 @@ async function streamOpenAIResponse(
 
   if (!hasError && !finalResponse) {
     hasError = true;
-    writeSse(
-      response,
+    await send(
       "response.failed",
       createErrorBody("server_error", "Runner stream ended without a completed response")
     );
   }
 
-  if (!hasError) {
+  if (!hasError && !response.writableEnded) {
     response.write("data: [DONE]\n\n");
   }
   if (!response.writableEnded) {
@@ -626,9 +641,18 @@ function sendJson(response: ServerResponse, statusCode: number, body: unknown): 
   response.end(JSON.stringify(body));
 }
 
-function writeSse(response: ServerResponse, eventName: string, data: unknown): void {
+async function writeSse(response: ServerResponse, eventName: string, data: unknown): Promise<void> {
+  if (response.writableEnded) {
+    return;
+  }
   response.write(`event: ${eventName}\n`);
-  response.write(`data: ${JSON.stringify(data)}\n\n`);
+  const drained = response.write(`data: ${JSON.stringify(data)}\n\n`);
+  if (!drained && !response.writableEnded) {
+    await Promise.race([
+      once(response, "drain"),
+      once(response, "close")
+    ]);
+  }
 }
 
 function createErrorBody(type: string, message: string) {
