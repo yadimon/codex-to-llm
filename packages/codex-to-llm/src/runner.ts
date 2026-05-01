@@ -17,6 +17,7 @@ import {
   cleanupDirectory
 } from "./workspace.js";
 import { terminate } from "./lifecycle.js";
+import { buildChildEnv } from "./env.js";
 import {
   DEFAULT_MAX_TOKENS,
   DEFAULT_MODEL,
@@ -161,10 +162,10 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
   const spawnConfig = resolveSpawn(cliPath, cliArgs);
   const child: ChildProcessWithoutNullStreams = spawn(spawnConfig.command, spawnConfig.args, {
     cwd: workspace,
-    env: {
-      ...process.env,
-      CODEX_HOME: codexHome
-    },
+    env: buildChildEnv({
+      codexHome,
+      envPassthrough: options.envPassthrough
+    }),
     windowsHide: true
   });
   const timeoutHandle = setTimeout(() => {

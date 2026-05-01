@@ -159,7 +159,8 @@ test("runPrompt fails when the codex process exits due to a signal", async () =>
       runPrompt("Hello", {
         authPath,
         cliPath,
-        timeout: 5000
+        timeout: 5000,
+        envPassthrough: ["FAKE_CODEX_TERMINATE_SIGNAL"]
       }),
       /signal SIGTERM|code 1/
     );
@@ -190,11 +191,11 @@ test("runPrompt aborts when AbortSignal fires while codex is still running", asy
     fs.writeFileSync(cliPath, `@echo off\r\n"${process.execPath}" "${fixturePath}" %*\r\n`, "utf8");
   }
 
-  const previousHang = process.env.FAKE_CODEX_HANG;
-  process.env.FAKE_CODEX_HANG = "1";
+  const previousDelay = process.env.FAKE_CODEX_DELAY_MS;
+  process.env.FAKE_CODEX_DELAY_MS = "5000";
 
   const controller = new AbortController();
-  setTimeout(() => controller.abort(new Error("client gone")), 100);
+  const abortTimer = setTimeout(() => controller.abort(new Error("client gone")), 100);
 
   try {
     await assert.rejects(
@@ -202,15 +203,17 @@ test("runPrompt aborts when AbortSignal fires while codex is still running", asy
         authPath,
         cliPath,
         timeout: 30_000,
-        signal: controller.signal
+        signal: controller.signal,
+        envPassthrough: ["FAKE_CODEX_DELAY_MS"]
       }),
       /client gone|Aborted by client/
     );
   } finally {
-    if (previousHang == null) {
-      delete process.env.FAKE_CODEX_HANG;
+    clearTimeout(abortTimer);
+    if (previousDelay == null) {
+      delete process.env.FAKE_CODEX_DELAY_MS;
     } else {
-      process.env.FAKE_CODEX_HANG = previousHang;
+      process.env.FAKE_CODEX_DELAY_MS = previousDelay;
     }
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -261,13 +264,13 @@ test("runPrompt escalates termination when codex ignores SIGTERM", { skip: proce
 
   fs.writeFileSync(authPath, JSON.stringify({ access_token: "test-token" }), "utf8");
 
-  const previousHang = process.env.FAKE_CODEX_HANG;
+  const previousDelay = process.env.FAKE_CODEX_DELAY_MS;
   const previousIgnore = process.env.FAKE_CODEX_IGNORE_SIGTERM;
-  process.env.FAKE_CODEX_HANG = "1";
+  process.env.FAKE_CODEX_DELAY_MS = "10000";
   process.env.FAKE_CODEX_IGNORE_SIGTERM = "1";
 
   const controller = new AbortController();
-  setTimeout(() => controller.abort(), 50);
+  const abortTimer = setTimeout(() => controller.abort(), 50);
   const start = Date.now();
 
   try {
@@ -276,16 +279,18 @@ test("runPrompt escalates termination when codex ignores SIGTERM", { skip: proce
         authPath,
         cliPath: fixturePath,
         timeout: 30_000,
-        signal: controller.signal
+        signal: controller.signal,
+        envPassthrough: ["FAKE_CODEX_DELAY_MS", "FAKE_CODEX_IGNORE_SIGTERM"]
       })
     );
     const elapsed = Date.now() - start;
     assert(elapsed < 4000, `escalation should complete within grace, got ${elapsed}ms`);
   } finally {
-    if (previousHang == null) {
-      delete process.env.FAKE_CODEX_HANG;
+    clearTimeout(abortTimer);
+    if (previousDelay == null) {
+      delete process.env.FAKE_CODEX_DELAY_MS;
     } else {
-      process.env.FAKE_CODEX_HANG = previousHang;
+      process.env.FAKE_CODEX_DELAY_MS = previousDelay;
     }
     if (previousIgnore == null) {
       delete process.env.FAKE_CODEX_IGNORE_SIGTERM;
@@ -324,7 +329,8 @@ test("runPrompt forwards web search and ignore flags to codex exec", async () =>
       timeout: 5000,
       webSearch: "live",
       ignoreRules: true,
-      ignoreUserConfig: true
+      ignoreUserConfig: true,
+      envPassthrough: ["FAKE_CODEX_CAPTURE_FILE"]
     });
     const capture = JSON.parse(fs.readFileSync(capturePath, "utf8")) as {
       args: string[];
