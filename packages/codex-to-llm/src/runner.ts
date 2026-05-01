@@ -18,17 +18,11 @@ import {
 } from "./workspace.js";
 import { terminate } from "./lifecycle.js";
 import { buildChildEnv } from "./env.js";
-import {
-  DEFAULT_MAX_TOKENS,
-  DEFAULT_MODEL,
-  DEFAULT_REASONING_EFFORT,
-  DEFAULT_SANDBOX,
-  DEFAULT_WEB_SEARCH,
-  type WebSearchMode
-} from "./types.js";
+import { buildCodexArgs } from "./codex-args.js";
+import { normalizeRunOptions } from "./options.js";
+import { appendBounded, buildAbortError, createCodexExitError } from "./exit.js";
 import type {
   CoreResponse,
-  NormalizedRunOptions,
   ResponseShell,
   RunOptions,
   Runner,
@@ -68,24 +62,14 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
   if (typeof prompt !== "string") {
     throw new Error("Prompt must be a string");
   }
-
   if (!prompt.trim()) {
     throw new Error("Prompt must not be empty");
   }
 
   const normalizedOptions = normalizeRunOptions(options);
-  const {
-    model,
-    reasoningEffort,
-    maxTokens,
-    sandbox,
-    timeoutMs,
-    cliPath,
-    webSearch,
-    ignoreRules,
-    ignoreUserConfig
-  } = normalizedOptions;
+  const { model, timeoutMs, cliPath } = normalizedOptions;
   assertCliPathExists(cliPath);
+
   const ownsWorkspace = !options.cwd;
   const ownsCodexHome = !options.configHome;
   let workspace: string | undefined;
@@ -115,57 +99,17 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
   let lastErrorMessage = "";
   let usage: UsageSummary = createEmptyUsage();
 
-  const cliArgs = [
-    "exec",
-    ...(ignoreUserConfig ? ["--ignore-user-config"] : []),
-    ...(ignoreRules ? ["--ignore-rules"] : []),
-    "--json",
-    "--color",
-    "never",
-    "--sandbox",
-    sandbox,
-    "--ephemeral",
-    "-C",
-    workspace,
-    "--skip-git-repo-check",
-    "--disable",
-    "undo",
-    "--disable",
-    "shell_tool",
-    "--disable",
-    "child_agents_md",
-    "--disable",
-    "apply_patch_freeform",
-    "--disable",
-    "remote_models",
-    "--model",
-    model,
-    "-c",
-    `model_reasoning_effort="${reasoningEffort}"`,
-    "-c",
-    `model_max_output_tokens=${maxTokens}`,
-    "-c",
-    `web_search="${webSearch}"`,
-    "-"
-  ];
+  const cliArgs = buildCodexArgs(normalizedOptions, workspace);
 
   queue.push({
     type: "response.started",
-    response: createResponseShell({
-      responseId,
-      model,
-      prompt,
-      startedAt
-    })
+    response: createResponseShell({ responseId, model, prompt, startedAt })
   });
 
   const spawnConfig = resolveSpawn(cliPath, cliArgs);
   const child: ChildProcessWithoutNullStreams = spawn(spawnConfig.command, spawnConfig.args, {
     cwd: workspace,
-    env: buildChildEnv({
-      codexHome,
-      envPassthrough: options.envPassthrough
-    }),
+    env: buildChildEnv({ codexHome, envPassthrough: options.envPassthrough }),
     windowsHide: true
   });
   const timeoutHandle = setTimeout(() => {
@@ -198,26 +142,15 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
     flushStdoutBuffer();
 
     const response: CoreResponse = {
-      ...createResponseShell({
-        responseId,
-        model,
-        prompt,
-        startedAt
-      }),
+      ...createResponseShell({ responseId, model, prompt, startedAt }),
       content,
       usage,
-      raw: {
-        stderr: stderr.trim(),
-        events: rawEvents
-      }
+      raw: { stderr: stderr.trim(), events: rawEvents }
     };
 
     cleanupDirectory(workspace, ownsWorkspace);
     cleanupDirectory(codexHome, ownsCodexHome);
-    queue.push({
-      type: "response.completed",
-      response
-    });
+    queue.push({ type: "response.completed", response });
     queue.close();
   }
 
@@ -230,23 +163,20 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
     signal?.removeEventListener("abort", onAbort);
     flushStdoutBuffer();
 
-    queue.push({
-      type: "response.failed",
-      error: {
-        message: error.message
-      }
-    });
+    queue.push({ type: "response.failed", error: { message: error.message } });
 
-    void terminate(child).catch(terminationError => {
-      const reason = terminationError instanceof Error
-        ? terminationError.message
-        : String(terminationError);
-      error.message = `${error.message} (termination failed: ${reason})`;
-    }).finally(() => {
-      cleanupDirectory(workspace, ownsWorkspace);
-      cleanupDirectory(codexHome, ownsCodexHome);
-      queue.fail(error);
-    });
+    void terminate(child)
+      .catch(terminationError => {
+        const reason = terminationError instanceof Error
+          ? terminationError.message
+          : String(terminationError);
+        error.message = `${error.message} (termination failed: ${reason})`;
+      })
+      .finally(() => {
+        cleanupDirectory(workspace, ownsWorkspace);
+        cleanupDirectory(codexHome, ownsCodexHome);
+        queue.fail(error);
+      });
   }
 
   function flushStdoutBuffer(): void {
@@ -254,7 +184,6 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
       stdoutBuffer = "";
       return;
     }
-
     processStdoutLine(stdoutBuffer);
     stdoutBuffer = "";
   }
@@ -266,17 +195,11 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
     }
 
     rawEvents.push(event);
-    queue.push({
-      type: "response.raw_event",
-      event
-    });
+    queue.push({ type: "response.raw_event", event });
 
     if (isAgentMessageEvent(event)) {
       content = content ? `${content}\n\n${event.item.text}` : event.item.text;
-      queue.push({
-        type: "response.output_text.delta",
-        delta: event.item.text
-      });
+      queue.push({ type: "response.output_text.delta", delta: event.item.text });
     }
 
     if (isErrorEvent(event)) {
@@ -326,14 +249,13 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
     finalizeFailure(normalizeSpawnError(error, cliPath));
   });
 
-  child.on("close", (code, signal) => {
+  child.on("close", (code, signalCode) => {
     setImmediate(() => {
-      const exitError = createCodexExitError(code, signal, stderr, lastErrorMessage);
+      const exitError = createCodexExitError(code, signalCode, stderr, lastErrorMessage);
       if (exitError) {
         finalizeFailure(exitError);
         return;
       }
-
       finalizeSuccess();
     });
   });
@@ -349,167 +271,8 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
 
 export const execCodex = runPrompt;
 
-const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
-const MAX_STDERR_LENGTH = 64 * 1024;
-const CLI_TOKEN_PATTERN = /^[A-Za-z0-9._:/-]+$/;
-
-export function normalizeRunOptions(options: RunOptions = {}): NormalizedRunOptions {
-  return {
-    model: normalizeCliToken(options.model, DEFAULT_MODEL, "model"),
-    reasoningEffort: normalizeCliToken(
-      options.reasoningEffort,
-      DEFAULT_REASONING_EFFORT,
-      "reasoning effort"
-    ),
-    maxTokens: normalizeMaxTokens(options.maxTokens),
-    sandbox: normalizeCliToken(options.sandbox, DEFAULT_SANDBOX, "sandbox"),
-    timeoutMs: normalizeTimeout(options.timeout),
-    cliPath: normalizeCliPath(options.cliPath),
-    webSearch: normalizeWebSearch(options.webSearch, process.env.CODEX_TO_LLM_WEB_SEARCH),
-    ignoreRules: normalizeBooleanOption(
-      options.ignoreRules,
-      process.env.CODEX_TO_LLM_IGNORE_RULES,
-      "ignoreRules"
-    ),
-    ignoreUserConfig: normalizeBooleanOption(
-      options.ignoreUserConfig,
-      process.env.CODEX_TO_LLM_IGNORE_USER_CONFIG,
-      "ignoreUserConfig"
-    )
-  };
-}
-
-function normalizeCliPath(value: string | undefined): string {
-  const normalized = value || process.env.CODEX_TO_LLM_CLI_PATH || "codex";
-  if (!normalized.trim()) {
-    throw new Error("Invalid cliPath: expected a non-empty path or command");
-  }
-
-  return normalized;
-}
-
-function normalizeCliToken(value: string | undefined, fallback: string, fieldName: string): string {
-  const normalized = value || fallback;
-  if (!CLI_TOKEN_PATTERN.test(normalized) || normalized.startsWith("-")) {
-    throw new Error(
-      `Invalid ${fieldName}: expected letters, digits, dots, colons, slashes, underscores, or hyphens`
-    );
-  }
-
-  return normalized;
-}
-
-function normalizeWebSearch(
-  value: RunOptions["webSearch"],
-  envValue: string | undefined
-): WebSearchMode {
-  if (typeof value === "boolean") {
-    return value ? "live" : "disabled";
-  }
-
-  const normalized =
-    value ||
-    (typeof envValue === "string" && envValue.trim() ? envValue.trim().toLowerCase() : undefined) ||
-    DEFAULT_WEB_SEARCH;
-
-  if (normalized === "disabled" || normalized === "cached" || normalized === "live") {
-    return normalized;
-  }
-
-  throw new Error('Invalid webSearch: expected "disabled", "cached", or "live"');
-}
-
-function normalizeBooleanOption(
-  value: boolean | undefined,
-  envValue: string | undefined,
-  fieldName: string
-): boolean {
-  if (typeof value === "boolean") {
-    return value;
-  }
-
-  if (envValue == null || !envValue.trim()) {
-    return false;
-  }
-
-  const normalized = envValue.trim().toLowerCase();
-  if (["1", "true", "yes", "on"].includes(normalized)) {
-    return true;
-  }
-
-  if (["0", "false", "no", "off"].includes(normalized)) {
-    return false;
-  }
-
-  throw new Error(`Invalid ${fieldName}: expected a boolean value`);
-}
-
-function normalizeTimeout(value: number | undefined): number {
-  if (value == null) {
-    return DEFAULT_TIMEOUT_MS;
-  }
-
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error("Invalid timeout: expected a positive integer number of milliseconds");
-  }
-
-  return value;
-}
-
-function normalizeMaxTokens(value: number | undefined): number {
-  if (value == null) {
-    return DEFAULT_MAX_TOKENS;
-  }
-
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error("Invalid maxTokens: expected a positive integer");
-  }
-
-  return value;
-}
-
-function buildAbortError(signal: AbortSignal | undefined): Error {
-  const reason = signal?.reason;
-  if (reason instanceof Error) {
-    return reason;
-  }
-  if (typeof reason === "string" && reason.length > 0) {
-    return new Error(reason);
-  }
-  return new Error("Aborted by client");
-}
-
-function appendBounded(current: string, nextChunk: string): string {
-  const combined = current + nextChunk;
-  if (combined.length <= MAX_STDERR_LENGTH) {
-    return combined;
-  }
-
-  const tailLength = MAX_STDERR_LENGTH - "\n[stderr truncated]".length;
-  return `${combined.slice(-tailLength)}\n[stderr truncated]`;
-}
-
-export function createCodexExitError(
-  code: number | null,
-  signal: NodeJS.Signals | null,
-  stderr: string,
-  errorMessage = ""
-): Error | undefined {
-  const normalizedStderr = stderr.trim();
-  if (signal) {
-    return new Error(normalizedStderr || errorMessage || `Codex exited due to signal ${signal}`);
-  }
-
-  if (code !== 0) {
-    return new Error(normalizedStderr || errorMessage || `Codex exited with code ${code}`);
-  }
-
-  return undefined;
-}
-
 function withCleanupPreserved(error: unknown, cleanupTasks: Array<() => void>): Error {
   const originalError = error instanceof Error ? error : new Error(String(error));
-
   for (const cleanupTask of cleanupTasks) {
     try {
       cleanupTask();
@@ -519,7 +282,6 @@ function withCleanupPreserved(error: unknown, cleanupTasks: Array<() => void>): 
       })`;
     }
   }
-
   return originalError;
 }
 
