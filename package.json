@@ -28,7 +28,11 @@
     "test:docker": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server test:docker",
     "test:all": "tsx ./scripts/run-workspace-tests.ts && tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server test:docker",
     "smoke:core": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm smoke:sdk",
-    "smoke:server": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server smoke"
+    "smoke:server": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server smoke",
+    "smoke:published-core": "tsx ./scripts/smoke-published-core.ts",
+    "smoke:published-server": "tsx ./scripts/smoke-published-server.ts",
+    "smoke:published-npx": "tsx ./scripts/smoke-npx.ts",
+    "smoke:published": "npm run smoke:published-core && npm run smoke:published-server && npm run smoke:published-npx"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
