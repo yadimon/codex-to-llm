@@ -35,7 +35,7 @@
     "smoke:published": "npm run smoke:published-core && npm run smoke:published-server && npm run smoke:published-npx"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^24.9.1",
     "eslint": "^9.39.1",
     "globals": "^16.4.0",
