@@ -20,6 +20,8 @@ export interface RunOptions {
   webSearch?: WebSearchMode | boolean;
   ignoreRules?: boolean;
   ignoreUserConfig?: boolean;
+  signal?: AbortSignal;
+  envPassthrough?: string[];
 }
 
 export interface NormalizedRunOptions {

@@ -172,12 +172,27 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
     }
   }, timeoutMs);
 
+  const signal = options.signal;
+  const onAbort = () => {
+    if (!settled) {
+      finalizeFailure(buildAbortError(signal));
+    }
+  };
+  if (signal) {
+    if (signal.aborted) {
+      setImmediate(onAbort);
+    } else {
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+  }
+
   function finalizeSuccess(): void {
     if (settled) {
       return;
     }
     settled = true;
     clearTimeout(timeoutHandle);
+    signal?.removeEventListener("abort", onAbort);
     flushStdoutBuffer();
 
     const response: CoreResponse = {
@@ -210,6 +225,7 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
     }
     settled = true;
     clearTimeout(timeoutHandle);
+    signal?.removeEventListener("abort", onAbort);
     if (!child.killed) {
       child.kill();
     }
@@ -443,6 +459,17 @@ function normalizeMaxTokens(value: number | undefined): number {
   }
 
   return value;
+}
+
+function buildAbortError(signal: AbortSignal | undefined): Error {
+  const reason = signal?.reason;
+  if (reason instanceof Error) {
+    return reason;
+  }
+  if (typeof reason === "string" && reason.length > 0) {
+    return new Error(reason);
+  }
+  return new Error("Aborted by client");
 }
 
 function appendBounded(current: string, nextChunk: string): string {
