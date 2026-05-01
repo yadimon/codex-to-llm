@@ -14,6 +14,18 @@ if (args[0] !== "exec") {
   process.exit(1);
 }
 
+if (process.env.FAKE_CODEX_IGNORE_SIGTERM) {
+  process.on("SIGTERM", () => {});
+}
+
+if (process.env.FAKE_CODEX_DUMP_ENV) {
+  fs.writeFileSync(
+    process.env.FAKE_CODEX_DUMP_ENV,
+    JSON.stringify(process.env, null, 2),
+    "utf8"
+  );
+}
+
 let stdin = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", chunk => {
@@ -26,6 +38,21 @@ process.stdin.on("end", () => {
     return;
   }
 
+  if (process.env.FAKE_CODEX_HANG) {
+    setInterval(() => {}, 60_000);
+    return;
+  }
+
+  const delay = Number(process.env.FAKE_CODEX_DELAY_MS) || 0;
+  if (delay > 0) {
+    setTimeout(() => emitResponse(stdin), delay);
+    return;
+  }
+
+  emitResponse(stdin);
+});
+
+function emitResponse(rawStdin) {
   if (process.env.FAKE_CODEX_CAPTURE_FILE) {
     fs.writeFileSync(
       process.env.FAKE_CODEX_CAPTURE_FILE,
@@ -41,7 +68,7 @@ process.stdin.on("end", () => {
     );
   }
 
-  const trimmed = stdin.trim();
+  const trimmed = rawStdin.trim();
   const message = fs.existsSync(process.env.FAKE_CODEX_RESPONSE_FILE || "")
     ? fs.readFileSync(process.env.FAKE_CODEX_RESPONSE_FILE, "utf8").trim()
     : `FAKE:${trimmed}`;
@@ -62,4 +89,4 @@ process.stdin.on("end", () => {
   for (const event of events) {
     process.stdout.write(`${JSON.stringify(event)}\n`);
   }
-});
+}
