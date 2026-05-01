@@ -86,7 +86,7 @@ export function createServer(options: ServerOptions = {}) {
   const host = options.host || process.env.CODEX_TO_LLM_SERVER_HOST || DEFAULT_HOST;
   const port = normalizeServerPort(options.port ?? process.env.CODEX_TO_LLM_SERVER_PORT ?? DEFAULT_PORT);
   const runner = options.runner || createDefaultRunner(options);
-  const models = resolveModels(options);
+  const { models, defaultModel } = resolveModels(options);
   const apiKey = options.apiKey || process.env.CODEX_TO_LLM_SERVER_API_KEY;
 
   const server = createHttpServer(async (request, response) => {
@@ -109,7 +109,7 @@ export function createServer(options: ServerOptions = {}) {
         validateResponsesRequest(body);
         validateRequestedModel(body.model, models);
         const prompt = requestToPrompt(body);
-        const runOptions = requestToRunOptions(body, options);
+        const runOptions = requestToRunOptions(body, options, defaultModel);
 
         if (body.stream) {
           await streamOpenAIResponse(request, response, runner, prompt, runOptions);
@@ -361,16 +361,33 @@ function readBooleanEnv(name: string): boolean | undefined {
   throw new Error(`Invalid ${name}: expected a boolean value`);
 }
 
-function resolveModels(options: ServerOptions): string[] {
-  const configured = options.models || process.env.CODEX_TO_LLM_SERVER_MODELS;
-  if (Array.isArray(configured)) {
-    return configured;
+function resolveModels(options: ServerOptions): { models: string[]; defaultModel: string } {
+  const list = parseModelList(options);
+  if (list.length === 0) {
+    throw new Error(
+      "No models configured: set CODEX_TO_LLM_SERVER_MODELS or pass options.models with at least one entry"
+    );
   }
+  const defaultModel =
+    options.defaultModel ||
+    process.env.CODEX_TO_LLM_SERVER_DEFAULT_MODEL ||
+    list[0];
+  if (!list.includes(defaultModel)) {
+    throw new Error(
+      `Default model "${defaultModel}" is not in the configured models list [${list.join(", ")}]`
+    );
+  }
+  return { models: list, defaultModel };
+}
 
+function parseModelList(options: ServerOptions): string[] {
+  const configured = options.models ?? process.env.CODEX_TO_LLM_SERVER_MODELS;
+  if (Array.isArray(configured)) {
+    return configured.map(value => (typeof value === "string" ? value.trim() : "")).filter(Boolean);
+  }
   if (typeof configured === "string" && configured.trim()) {
     return configured.split(",").map(value => value.trim()).filter(Boolean);
   }
-
   return [options.defaultModel || process.env.CODEX_TO_LLM_SERVER_DEFAULT_MODEL || DEFAULT_MODEL];
 }
 
@@ -427,14 +444,15 @@ function requestToPrompt(body: ResponsesRequestBody): string {
   });
 }
 
-function requestToRunOptions(body: ResponsesRequestBody, options: ServerOptions): RunOptions {
+function requestToRunOptions(body: ResponsesRequestBody, options: ServerOptions, defaultModel: string): RunOptions {
   validateReasoningEffort(body.reasoning?.effort);
   validateMaxOutputTokens(body.max_output_tokens);
 
   return {
-    model: body.model || options.defaultModel || process.env.CODEX_TO_LLM_SERVER_DEFAULT_MODEL || DEFAULT_MODEL,
+    model: body.model || defaultModel,
     maxTokens: body.max_output_tokens ?? undefined,
-    reasoningEffort: body.reasoning?.effort ?? undefined
+    reasoningEffort: body.reasoning?.effort ?? undefined,
+    envPassthrough: options.envPassthrough
   };
 }
 

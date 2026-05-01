@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { RunOptions, StreamEvent } from "@yadimon/codex-to-llm";
 import {
   buildOpenAIResponse,
+  createServer,
   startServer
 } from "../src/index.js";
 
@@ -541,6 +542,58 @@ test("SSE: client disconnect aborts the runner stream", async () => {
     assert.equal(aborts.length, 1, "runner should observe abort");
     assert.ok(observedSignal, "stub should receive an AbortSignal");
     assert.equal(observedSignal!.aborted, true);
+  } finally {
+    await started.close();
+  }
+});
+
+test("createServer rejects empty models array at startup", () => {
+  assert.throws(
+    () => createServer({ models: [], runner: createStubRunner() }),
+    /No models configured/
+  );
+});
+
+test("createServer rejects whitespace-only CSV models at startup", () => {
+  const previous = process.env.CODEX_TO_LLM_SERVER_MODELS;
+  process.env.CODEX_TO_LLM_SERVER_MODELS = " , ,  ";
+  try {
+    assert.throws(
+      () => createServer({ runner: createStubRunner() }),
+      /No models configured/
+    );
+  } finally {
+    if (previous == null) {
+      delete process.env.CODEX_TO_LLM_SERVER_MODELS;
+    } else {
+      process.env.CODEX_TO_LLM_SERVER_MODELS = previous;
+    }
+  }
+});
+
+test("createServer rejects defaultModel outside the configured list", () => {
+  assert.throws(
+    () => createServer({
+      models: ["a", "b"],
+      defaultModel: "c",
+      runner: createStubRunner()
+    }),
+    /Default model "c" is not in the configured models list/
+  );
+});
+
+test("createServer trims whitespace in configured models", async () => {
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    models: " a , b ,c",
+    defaultModel: "a",
+    runner: createStubRunner()
+  });
+  try {
+    const models = await fetch(`${started.url}/v1/models`);
+    const json = (await models.json()) as { data: Array<{ id: string }> };
+    assert.deepEqual(json.data.map(m => m.id), ["a", "b", "c"]);
   } finally {
     await started.close();
   }
