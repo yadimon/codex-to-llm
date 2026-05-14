@@ -36,14 +36,43 @@ export function prepareAuthCopy(options: {
   return targetAuth;
 }
 
+export function resolveCodexHomeBase(): string {
+  const override = process.env.CODEX_TO_LLM_HOME_BASE;
+  if (override) {
+    return override;
+  }
+
+  const home = os.homedir();
+  if (process.platform === "win32") {
+    const localAppData = process.env.LOCALAPPDATA || (home && path.join(home, "AppData", "Local"));
+    if (!localAppData) {
+      throw new Error("Unable to resolve LOCALAPPDATA for codex_home base");
+    }
+    return path.join(localAppData, "codex-to-llm", "homes");
+  }
+
+  const xdgDataHome = process.env.XDG_DATA_HOME || (home && path.join(home, ".local", "share"));
+  if (!xdgDataHome) {
+    throw new Error("Unable to resolve XDG_DATA_HOME for codex_home base");
+  }
+  return path.join(xdgDataHome, "codex-to-llm", "homes");
+}
+
 export function createCodexHome(options: { authPath?: string; configHome?: string } = {}): string {
   const authPath = resolveAuthPath(options.authPath);
   if (!fs.existsSync(authPath)) {
     throw new Error(`Codex auth not found at ${authPath}`);
   }
 
-  const rootDir = options.configHome || fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-home-"));
-  fs.mkdirSync(rootDir, { recursive: true });
+  let rootDir: string;
+  if (options.configHome) {
+    rootDir = options.configHome;
+    fs.mkdirSync(rootDir, { recursive: true });
+  } else {
+    const base = resolveCodexHomeBase();
+    fs.mkdirSync(base, { recursive: true });
+    rootDir = fs.mkdtempSync(path.join(base, "codex-to-llm-home-"));
+  }
 
   const targetAuth = path.join(rootDir, "auth.json");
   fs.copyFileSync(authPath, targetAuth);
