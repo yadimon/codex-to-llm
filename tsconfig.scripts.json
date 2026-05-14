@@ -5,5 +5,5 @@
     "noEmit": true,
     "tsBuildInfoFile": ".tsbuildinfo.scripts"
   },
-  "include": ["scripts/**/*.ts"]
+  "include": ["scripts/**/*.ts", "test/**/*.ts"]
 }

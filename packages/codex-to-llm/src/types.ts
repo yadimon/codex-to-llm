@@ -2,6 +2,9 @@ export const DEFAULT_MODEL = "gpt-5.3-codex-spark";
 export const DEFAULT_REASONING_EFFORT = "low";
 export const DEFAULT_MAX_TOKENS = 64;
 export const DEFAULT_SANDBOX = "read-only";
+export const DEFAULT_WEB_SEARCH = "disabled";
+
+export type WebSearchMode = "disabled" | "cached" | "live";
 
 export interface RunOptions {
   model?: string;
@@ -14,6 +17,11 @@ export interface RunOptions {
   configHome?: string;
   cwd?: string;
   responseId?: string;
+  webSearch?: WebSearchMode | boolean;
+  ignoreRules?: boolean;
+  ignoreUserConfig?: boolean;
+  signal?: AbortSignal;
+  envPassthrough?: string[];
 }
 
 export interface NormalizedRunOptions {
@@ -22,36 +30,11 @@ export interface NormalizedRunOptions {
   maxTokens: number;
   timeoutMs: number;
   sandbox: string;
+  cliPath: string;
+  webSearch: WebSearchMode;
+  ignoreRules: boolean;
+  ignoreUserConfig: boolean;
 }
-
-export interface NormalizedMessage {
-  role: "system" | "developer" | "user" | "assistant";
-  content: string;
-}
-
-export interface NormalizedConversationInput {
-  instructions?: string;
-  messages: NormalizedMessage[];
-}
-
-export type MessageTextBlock = {
-  type: "text" | "input_text" | "output_text";
-  text: string;
-};
-
-export type ConversationMessageInput = {
-  role?: NormalizedMessage["role"];
-  content: string | MessageTextBlock[];
-};
-
-export type ConversationInput =
-  | string
-  | ConversationMessageInput[]
-  | {
-      instructions?: string;
-      messages?: ConversationMessageInput[];
-      input?: string | ConversationMessageInput[];
-    };
 
 export interface UsageSummary {
   inputTokens: number;
@@ -63,8 +46,7 @@ export interface UsageSummary {
 export interface CoreResponse {
   id: string;
   model: string;
-  instructions?: string;
-  messages: NormalizedMessage[];
+  prompt: string;
   createdAt: number;
   content: string;
   usage: UsageSummary;
@@ -90,8 +72,8 @@ export interface ParsedCodexEvents {
 }
 
 export interface Runner {
-  runResponse(input: ConversationInput, options?: RunOptions): Promise<CoreResponse>;
-  streamResponse(input: ConversationInput, options?: RunOptions): AsyncIterable<StreamEvent>;
+  runPrompt(prompt: string, options?: RunOptions): Promise<CoreResponse>;
+  streamPrompt(prompt: string, options?: RunOptions): AsyncIterable<StreamEvent>;
 }
 
 export interface SpawnResolution {

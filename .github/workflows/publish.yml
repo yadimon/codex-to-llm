@@ -37,9 +37,6 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
 
-      - name: Update npm CLI for Trusted Publishing
-        run: npm install --global npm@latest
-
       - name: Install
         run: npm ci
 
@@ -53,8 +50,32 @@ jobs:
             exit 1
           fi
 
-      - name: Verify repository
-        run: npm run check
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test core package
+        run: npm run test --workspace @yadimon/codex-to-llm
+
+      - name: Test server package
+        run: npm run test --workspace @yadimon/codex-to-llm-server
+
+      - name: Core e2e
+        run: npm run e2e --workspace @yadimon/codex-to-llm
+
+      - name: Server e2e
+        run: npm run e2e --workspace @yadimon/codex-to-llm-server
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack core package
+        run: npm run pack --workspace @yadimon/codex-to-llm
+
+      - name: Publish core package dry run
+        run: npm run publish:dry-run --workspace @yadimon/codex-to-llm
 
       - name: Publish core package to npm with Trusted Publishing
         run: npm publish --workspace @yadimon/codex-to-llm
@@ -77,9 +98,6 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
 
-      - name: Update npm CLI for Trusted Publishing
-        run: npm install --global npm@latest
-
       - name: Install
         run: npm ci
 
@@ -93,8 +111,32 @@ jobs:
             exit 1
           fi
 
-      - name: Verify repository
-        run: npm run check
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test core package
+        run: npm run test --workspace @yadimon/codex-to-llm
+
+      - name: Test server package
+        run: npm run test --workspace @yadimon/codex-to-llm-server
+
+      - name: Core e2e
+        run: npm run e2e --workspace @yadimon/codex-to-llm
+
+      - name: Server e2e
+        run: npm run e2e --workspace @yadimon/codex-to-llm-server
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack server package
+        run: npm run pack --workspace @yadimon/codex-to-llm-server
+
+      - name: Publish server package dry run
+        run: npm run publish:dry-run --workspace @yadimon/codex-to-llm-server
 
       - name: Publish server package to npm with Trusted Publishing
         run: npm publish --workspace @yadimon/codex-to-llm-server

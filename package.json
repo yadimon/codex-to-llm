@@ -24,20 +24,24 @@
     "release:server:patch": "tsx ./scripts/release-workspace.ts @yadimon/codex-to-llm-server patch codex-to-llm-server",
     "release:server:minor": "tsx ./scripts/release-workspace.ts @yadimon/codex-to-llm-server minor codex-to-llm-server",
     "release:server:major": "tsx ./scripts/release-workspace.ts @yadimon/codex-to-llm-server major codex-to-llm-server",
-    "test": "tsx ./scripts/run-workspace-tests.ts",
+    "test": "tsx ./scripts/run-root-node-tests.ts && tsx ./scripts/run-workspace-tests.ts",
     "test:docker": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server test:docker",
     "test:all": "tsx ./scripts/run-workspace-tests.ts && tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server test:docker",
     "smoke:core": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm smoke:sdk",
-    "smoke:server": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server smoke"
+    "smoke:server": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server smoke",
+    "smoke:published-core": "tsx ./scripts/smoke-published-core.ts",
+    "smoke:published-server": "tsx ./scripts/smoke-published-server.ts",
+    "smoke:published-npx": "tsx ./scripts/smoke-npx.ts",
+    "smoke:published": "npm run smoke:published-core && npm run smoke:published-server && npm run smoke:published-npx"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.9.1",
     "eslint": "^9.39.1",
     "globals": "^16.4.0",
-    "publint": "^0.3.15",
+    "publint": "^0.3.21",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.46.1"
+    "typescript-eslint": "^8.59.3"
   }
 }

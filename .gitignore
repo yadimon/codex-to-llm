@@ -2,8 +2,15 @@ node_modules/
 *.tgz
 .npm-cache/
 packages/*/.npm-cache/
+packages/*/dist/
 .codex-to-llm/
 .codex-minimal/
 tmp-auth/
 .idea/
 *.tsbuildinfo*
+review.md
+review.*.md
+solutions.md
+skills-data/
+forever-improve-loop.md
+CLAUDE.md

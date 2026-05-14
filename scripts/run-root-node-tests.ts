@@ -3,12 +3,8 @@ import * as path from "node:path";
 import { run } from "node:test";
 import { spec } from "node:test/reporters";
 
-if (process.env.CODEX_TO_LLM_SERVER_LOG == null) {
-  process.env.CODEX_TO_LLM_SERVER_LOG = "off";
-}
-
-const packageRoot = process.cwd();
-const testDir = path.join(packageRoot, "test");
+const repoRoot = process.cwd();
+const testDir = path.join(repoRoot, "test");
 const testFiles = fs
   .readdirSync(testDir)
   .filter(name => name.endsWith(".test.ts"))

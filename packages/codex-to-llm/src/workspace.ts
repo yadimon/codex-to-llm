@@ -12,12 +12,7 @@ export function resolveDefaultAuthPath(): string {
 }
 
 export function resolveAuthPath(explicitPath?: string): string {
-  return (
-    explicitPath ||
-    process.env.CODEX_TO_LLM_AUTH_PATH ||
-    process.env.CODEX_MIN_AUTH_PATH ||
-    resolveDefaultAuthPath()
-  );
+  return explicitPath || process.env.CODEX_TO_LLM_AUTH_PATH || resolveDefaultAuthPath();
 }
 
 export function prepareAuthCopy(options: {
@@ -33,10 +28,7 @@ export function prepareAuthCopy(options: {
   const explicitTargetPath = options.targetPath;
   const targetDir = explicitTargetPath
     ? path.dirname(explicitTargetPath)
-    : options.targetDir ||
-      process.env.CODEX_TO_LLM_LOCAL_HOME ||
-      process.env.CODEX_MIN_LOCAL_HOME ||
-      path.join(process.cwd(), ".codex-to-llm");
+    : options.targetDir || process.env.CODEX_TO_LLM_LOCAL_HOME || path.join(process.cwd(), ".codex-to-llm");
   fs.mkdirSync(targetDir, { recursive: true });
 
   const targetAuth = explicitTargetPath || path.join(targetDir, "auth.json");
@@ -62,7 +54,6 @@ export function createCodexHome(options: { authPath?: string; configHome?: strin
     "[features]",
     "shell_snapshot = false",
     "unified_exec = false",
-    "steer = false",
     "multi_agent = false",
     "apps = false",
     "js_repl = false",
@@ -74,9 +65,12 @@ export function createCodexHome(options: { authPath?: string; configHome?: strin
 }
 
 export function createWorkspace(workspacePath?: string): string {
-  const rootDir = workspacePath || fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-workspace-"));
-  fs.mkdirSync(rootDir, { recursive: true });
-  return rootDir;
+  if (!workspacePath) {
+    return fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-workspace-"));
+  }
+
+  fs.mkdirSync(workspacePath, { recursive: true });
+  return workspacePath;
 }
 
 export function cleanupDirectory(directoryPath: string | undefined, shouldCleanup: boolean): void {
@@ -84,5 +78,25 @@ export function cleanupDirectory(directoryPath: string | undefined, shouldCleanu
     return;
   }
 
-  fs.rmSync(directoryPath, { recursive: true, force: true });
+  try {
+    fs.rmSync(directoryPath, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 50
+    });
+  } catch (error) {
+    if (!isIgnorableCleanupError(error)) {
+      throw error;
+    }
+  }
+}
+
+function isIgnorableCleanupError(error: unknown): boolean {
+  if (!(error instanceof Error) || !("code" in error)) {
+    return false;
+  }
+
+  const code = String(error.code);
+  return code === "EBUSY" || code === "ENOTEMPTY" || code === "EPERM";
 }

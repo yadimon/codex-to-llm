@@ -7,7 +7,7 @@ import {
   cleanupDirectory,
   createCodexHome,
   prepareAuthCopy,
-  runResponse
+  runPrompt
 } from "../src/index.js";
 
 function makeTempDir(): string {
@@ -45,10 +45,12 @@ test("createCodexHome writes auth and config files", () => {
     authPath: sourceAuth,
     configHome
   });
+  const configToml = fs.readFileSync(path.join(configHome, "config.toml"), "utf8");
 
   assert.equal(createdHome, configHome);
   assert.equal(fs.readFileSync(path.join(configHome, "auth.json"), "utf8"), "{\"token\":\"x\"}\n");
-  assert.match(fs.readFileSync(path.join(configHome, "config.toml"), "utf8"), /web_search = "disabled"/);
+  assert.match(configToml, /web_search = "disabled"/);
+  assert.doesNotMatch(configToml, /steer = false/);
 
   cleanupDirectory(sourceDir, true);
   cleanupDirectory(configHome, true);
@@ -67,7 +69,7 @@ test("cleanupDirectory removes owned temp directories and ignores disabled clean
   cleanupDirectory(keepDir, true);
 });
 
-test("runResponse reports a helpful error when the codex CLI is missing", async () => {
+test("runPrompt reports a helpful error when the codex CLI is missing", async () => {
   const sourceDir = makeTempDir();
   const workspace = makeTempDir();
   const configHome = makeTempDir();
@@ -76,15 +78,8 @@ test("runResponse reports a helpful error when the codex CLI is missing", async 
   fs.writeFileSync(sourceAuth, "{\"token\":\"x\"}\n", "utf8");
 
   await assert.rejects(
-    runResponse(
-      {
-        messages: [
-          {
-            role: "user",
-            content: "Hi"
-          }
-        ]
-      },
+    runPrompt(
+      "Hi",
       {
         authPath: sourceAuth,
         cliPath: path.join(sourceDir, "missing-codex"),

@@ -1,126 +1,149 @@
-import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { randomUUID } from "node:crypto";
+import { createServer as createHttpServer } from "node:http";
+import { assertAuthorized } from "./auth.js";
+import { normalizeServerPort, resolveModels } from "./config.js";
 import {
-  DEFAULT_MODEL,
-  runResponse as defaultRunResponse,
-  streamResponse as defaultStreamResponse
-} from "@yadimon/codex-to-llm";
-import type {
+  createErrorBody,
+  isHttpError,
+  readJsonBody,
+  sendJson
+} from "./http-io.js";
+import { logEvent, newRequestId } from "./log.js";
+import {
+  buildModelsResponse,
+  buildOpenAIResponse,
+  streamOpenAIResponse
+} from "./openai-format.js";
+import { requestToPrompt } from "./prompt.js";
+import { createDefaultRunner } from "./runners/default.js";
+import { createMockRunner } from "./runners/mock.js";
+import {
+  DEFAULT_HOST,
+  DEFAULT_PORT,
+  type ServerOptions
+} from "./types.js";
+import {
+  requestToRunOptions,
+  validateRequestedModel,
+  validateResponsesRequest
+} from "./validation.js";
+
+export {
+  buildModelsResponse,
+  buildOpenAIResponse,
+  streamOpenAIResponse
+} from "./openai-format.js";
+export { logEvent, newRequestId } from "./log.js";
+export type { LogLevel, LogRecord } from "./log.js";
+export {
+  serializeServerPrompt,
+  normalizeServerPromptInput
+} from "./prompt.js";
+export {
+  createErrorBody,
+  createHttpError,
+  isHttpError,
+  readJsonBody,
+  sendJson,
+  writeSse
+} from "./http-io.js";
+export { assertAuthorized } from "./auth.js";
+export {
+  defaultRunnerOptions,
+  normalizeServerPort,
+  resolveModels
+} from "./config.js";
+export { createDefaultRunner } from "./runners/default.js";
+export { createMockRunner } from "./runners/mock.js";
+export {
+  validateRequestedModel,
+  validateResponsesRequest
+} from "./validation.js";
+export type {
   ConversationMessageInput,
-  CoreResponse,
-  ConversationInput,
-  RunOptions,
-  StreamEvent
-} from "@yadimon/codex-to-llm";
-
-const DEFAULT_HOST = "127.0.0.1";
-const DEFAULT_PORT = 3000;
-const UNSUPPORTED_REQUEST_FIELDS = [
-  "tools",
-  "tool_choice",
-  "conversation",
-  "previous_response_id",
-  "input_audio",
-  "input_image",
-  "parallel_tool_calls"
-] as const;
-
-export interface ResponsesRequestBody {
-  model?: string;
-  stream?: boolean;
-  input?: ConversationInput;
-  instructions?: string;
-  max_output_tokens?: number;
-  reasoning?: {
-    effort?: string;
-  };
-  tools?: unknown;
-  tool_choice?: unknown;
-  conversation?: unknown;
-  previous_response_id?: unknown;
-  input_audio?: unknown;
-  input_image?: unknown;
-  parallel_tool_calls?: unknown;
-}
-
-export interface Runner {
-  runResponse(input: ConversationInput, options?: RunOptions): Promise<CoreResponse>;
-  streamResponse(input: ConversationInput, options?: RunOptions): AsyncIterable<StreamEvent>;
-}
-
-export interface ServerOptions extends RunOptions {
-  host?: string;
-  port?: number;
-  models?: string[] | string;
-  defaultModel?: string;
-  apiKey?: string;
-  mockMode?: string | boolean;
-  runner?: Runner;
-}
-
-type HttpError = Error & { statusCode: number };
-type ServerCoreInput = {
-  instructions?: string;
-  input?: string | ConversationMessageInput[];
-};
-const VALID_REASONING_EFFORTS = new Set(["low", "medium", "high"]);
+  HttpError,
+  MessageRole,
+  MessageTextBlock,
+  ResponsesInput,
+  ResponsesRequestBody,
+  Runner,
+  ServerOptions,
+  ServerPromptInput
+} from "./types.js";
 
 export function createServer(options: ServerOptions = {}) {
   const host = options.host || process.env.CODEX_TO_LLM_SERVER_HOST || DEFAULT_HOST;
-  const port = options.port ?? Number(process.env.CODEX_TO_LLM_SERVER_PORT || DEFAULT_PORT);
-  const runner = options.runner || createDefaultRunner(options);
-  const models = resolveModels(options);
-  const apiKey = options.apiKey || process.env.COMPAT_API_KEY || process.env.CODEX_TO_LLM_SERVER_API_KEY;
+  const port = normalizeServerPort(options.port ?? process.env.CODEX_TO_LLM_SERVER_PORT ?? DEFAULT_PORT);
+  const runner =
+    options.runner ||
+    (resolveMockMode(options) ? createMockRunner(options) : createDefaultRunner(options));
+  const { models, defaultModel } = resolveModels(options);
+  const apiKey = options.apiKey || process.env.CODEX_TO_LLM_SERVER_API_KEY;
 
   const server = createHttpServer(async (request, response) => {
+    const reqId = newRequestId();
+    const start = Date.now();
+    const route = `${request.method} ${new URL(request.url || "/", "http://x").pathname}`;
+    const runMeta: Record<string, unknown> = {};
+    let errorMessage: string | undefined;
     try {
       const url = new URL(request.url || "/", `http://${request.headers.host || `${host}:${port}`}`);
 
       if (request.method === "GET" && url.pathname === "/healthz") {
         sendJson(response, 200, { ok: true });
-        return;
-      }
-
-      if (request.method === "GET" && url.pathname === "/v1/models") {
+      } else if (request.method === "GET" && url.pathname === "/v1/models") {
         sendJson(response, 200, buildModelsResponse(models));
-        return;
-      }
-
-      if (request.method === "POST" && url.pathname === "/v1/responses") {
+      } else if (request.method === "POST" && url.pathname === "/v1/responses") {
         assertAuthorized(request, apiKey);
         const body = await readJsonBody(request);
         validateResponsesRequest(body);
         validateRequestedModel(body.model, models);
-        const coreInput = requestToCoreInput(body);
-        const runOptions = requestToRunOptions(body, options);
+        const prompt = requestToPrompt(body);
+        const runOptions = requestToRunOptions(body, options, defaultModel);
+        runMeta.model = runOptions.model;
+        runMeta.stream = !!body.stream;
+        runMeta.prompt_chars = prompt.length;
 
         if (body.stream) {
-          await streamOpenAIResponse(response, runner, coreInput, runOptions);
-          return;
+          const final = await streamOpenAIResponse(request, response, runner, prompt, runOptions);
+          if (final?.usage) {
+            runMeta.input_tokens = final.usage.input_tokens;
+            runMeta.output_tokens = final.usage.output_tokens;
+          }
+        } else {
+          const result = await runner.runPrompt(prompt, runOptions);
+          runMeta.input_tokens = result.usage.inputTokens;
+          runMeta.output_tokens = result.usage.outputTokens;
+          sendJson(response, 200, buildOpenAIResponse(result));
         }
-
-        const result = await runner.runResponse(coreInput, runOptions);
-        sendJson(response, 200, buildOpenAIResponse(result));
-        return;
+      } else {
+        sendJson(response, 404, createErrorBody("not_found", "Route not found"));
       }
-
-      sendJson(response, 404, createErrorBody("not_found", "Route not found"));
     } catch (error) {
       const statusCode = isHttpError(error) ? error.statusCode : 500;
       const message = error instanceof Error ? error.message : String(error);
+      errorMessage = message;
       sendJson(
         response,
         statusCode,
         createErrorBody(statusCode >= 500 ? "server_error" : "invalid_request_error", message)
       );
+    } finally {
+      const status = response.statusCode;
+      const isFailure = status >= 400;
+      logEvent({
+        level: isFailure ? (status >= 500 ? "error" : "warn") : "info",
+        msg: isFailure ? "request_failed" : "request",
+        req_id: reqId,
+        route,
+        status,
+        latency_ms: Date.now() - start,
+        ...(errorMessage ? { error: errorMessage } : {}),
+        ...runMeta
+      });
     }
   });
 
-  return {
-    host,
-    port,
-    server
-  };
+  return { host, port, server };
 }
 
 export async function startServer(options: ServerOptions = {}) {
@@ -150,7 +173,6 @@ export async function startServer(options: ServerOptions = {}) {
             reject(error);
             return;
           }
-
           resolve();
         });
       });
@@ -158,387 +180,7 @@ export async function startServer(options: ServerOptions = {}) {
   };
 }
 
-export function buildOpenAIResponse(result: CoreResponse) {
-  return {
-    id: result.id || `resp_${randomUUID().replace(/-/g, "")}`,
-    object: "response",
-    created_at: result.createdAt || Math.floor(Date.now() / 1000),
-    status: "completed",
-    model: result.model || DEFAULT_MODEL,
-    output: [
-      {
-        id: `msg_${randomUUID().replace(/-/g, "")}`,
-        type: "message",
-        role: "assistant",
-        status: "completed",
-        content: [
-          {
-            type: "output_text",
-            text: result.content,
-            annotations: []
-          }
-        ]
-      }
-    ],
-    output_text: result.content,
-    usage: {
-      input_tokens: result.usage?.inputTokens ?? 0,
-      input_tokens_details: {
-        cached_tokens: result.usage?.cachedInputTokens ?? 0
-      },
-      output_tokens: result.usage?.outputTokens ?? 0,
-      total_tokens: result.usage?.totalTokens ?? 0
-    }
-  };
-}
-
-function createDefaultRunner(options: ServerOptions): Runner {
+function resolveMockMode(options: ServerOptions): boolean {
   const mockMode = options.mockMode || process.env.CODEX_TO_LLM_SERVER_MOCK_MODE;
-  if (mockMode && mockMode !== "off") {
-    return createMockRunner(options);
-  }
-
-  return {
-    runResponse(input, requestOptions = {}) {
-      return defaultRunResponse(input, {
-        ...defaultRunnerOptions(options),
-        ...requestOptions
-      });
-    },
-    streamResponse(input, requestOptions = {}) {
-      return defaultStreamResponse(input, {
-        ...defaultRunnerOptions(options),
-        ...requestOptions
-      });
-    }
-  };
-}
-
-function createMockRunner(options: ServerOptions): Runner {
-  return {
-    async runResponse(input, requestOptions = {}) {
-      return buildMockCoreResponse(input, requestOptions, options);
-    },
-    async *streamResponse(input, requestOptions = {}) {
-      const response = buildMockCoreResponse(input, requestOptions, options);
-      for (const event of response.raw.events) {
-        yield {
-          type: "response.raw_event",
-          event
-        } satisfies StreamEvent;
-      }
-      yield {
-        type: "response.started",
-        response: {
-          id: response.id,
-          model: response.model,
-          instructions: response.instructions,
-          messages: response.messages,
-          createdAt: response.createdAt
-        }
-      };
-      yield {
-        type: "response.output_text.delta",
-        delta: response.content
-      };
-      yield {
-        type: "response.completed",
-        response
-      };
-    }
-  };
-}
-
-function buildMockCoreResponse(
-  input: ConversationInput,
-  requestOptions: RunOptions,
-  options: ServerOptions
-): CoreResponse {
-  const model =
-    requestOptions.model ||
-    options.defaultModel ||
-    process.env.CODEX_TO_LLM_SERVER_DEFAULT_MODEL ||
-    DEFAULT_MODEL;
-  const content = process.env.CODEX_TO_LLM_SERVER_MOCK_RESPONSE || "mock response";
-  const normalizedInput = isObjectWithInput(input)
-    ? typeof input.input === "string"
-      ? input.input
-      : JSON.stringify(input.input ?? "", null, 2)
-    : "";
-  const inputTokens = Math.ceil(normalizedInput.length / 4);
-  const outputTokens = Math.ceil(content.length / 4);
-  const rawEvents = [
-    {
-      type: "agent_message_delta",
-      item: {
-        text: content
-      }
-    },
-    {
-      type: "turn.completed",
-      usage: {
-        input_tokens: inputTokens,
-        cached_input_tokens: 0,
-        output_tokens: outputTokens
-      }
-    }
-  ];
-
-  return {
-    id: `resp_mock_${randomUUID().replace(/-/g, "")}`,
-    model,
-    instructions: typeof input === "object" && input && !Array.isArray(input) ? input.instructions : undefined,
-    messages: [
-      {
-        role: "user",
-        content: normalizedInput
-      }
-    ],
-    createdAt: Math.floor(Date.now() / 1000),
-    content,
-    usage: {
-      inputTokens,
-      cachedInputTokens: 0,
-      outputTokens,
-      totalTokens: inputTokens + outputTokens
-    },
-    raw: {
-      stderr: "",
-      events: rawEvents
-    }
-  };
-}
-
-function defaultRunnerOptions(options: ServerOptions): RunOptions {
-  return {
-    authPath: options.authPath || process.env.CODEX_TO_LLM_AUTH_PATH,
-    cliPath: options.cliPath || process.env.CODEX_TO_LLM_CLI_PATH,
-    configHome: options.configHome || process.env.CODEX_TO_LLM_CONFIG_HOME,
-    cwd: options.cwd || process.env.CODEX_TO_LLM_WORKSPACE,
-    reasoningEffort: options.reasoningEffort || process.env.CODEX_TO_LLM_REASONING_EFFORT,
-    sandbox: options.sandbox || process.env.CODEX_TO_LLM_SANDBOX
-  };
-}
-
-function resolveModels(options: ServerOptions): string[] {
-  const configured = options.models || process.env.CODEX_TO_LLM_SERVER_MODELS;
-  if (Array.isArray(configured)) {
-    return configured;
-  }
-
-  if (typeof configured === "string" && configured.trim()) {
-    return configured.split(",").map(value => value.trim()).filter(Boolean);
-  }
-
-  return [options.defaultModel || process.env.CODEX_TO_LLM_SERVER_DEFAULT_MODEL || DEFAULT_MODEL];
-}
-
-function assertAuthorized(request: IncomingMessage, apiKey?: string): void {
-  if (!apiKey) {
-    return;
-  }
-
-  const authorization = request.headers.authorization || "";
-  if (authorization === `Bearer ${apiKey}`) {
-    return;
-  }
-
-  throw createHttpError(401, "Missing or invalid bearer token");
-}
-
-function validateResponsesRequest(body: ResponsesRequestBody): void {
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    throw createHttpError(400, "Request body must be a JSON object");
-  }
-
-  if (body.input == null) {
-    throw createHttpError(400, "input is required");
-  }
-
-  for (const field of UNSUPPORTED_REQUEST_FIELDS) {
-    if (body[field] != null) {
-      throw createHttpError(400, `${field} is not supported`);
-    }
-  }
-}
-
-function validateRequestedModel(model: string | undefined, models: string[]): void {
-  if (!model) {
-    return;
-  }
-
-  if (!models.includes(model)) {
-    throw createHttpError(400, `Unsupported model: ${model}`);
-  }
-}
-
-function requestToCoreInput(body: ResponsesRequestBody): ServerCoreInput {
-  return {
-    instructions: body.instructions,
-    input:
-      typeof body.input === "string" || Array.isArray(body.input) ? body.input : JSON.stringify(body.input ?? "")
-  };
-}
-
-function requestToRunOptions(body: ResponsesRequestBody, options: ServerOptions): RunOptions {
-  validateReasoningEffort(body.reasoning?.effort);
-  validateMaxOutputTokens(body.max_output_tokens);
-
-  return {
-    model: body.model || options.defaultModel || process.env.CODEX_TO_LLM_SERVER_DEFAULT_MODEL || DEFAULT_MODEL,
-    maxTokens: body.max_output_tokens ?? undefined,
-    reasoningEffort: body.reasoning?.effort ?? undefined
-  };
-}
-
-function validateReasoningEffort(effort: string | undefined): void {
-  if (effort == null) {
-    return;
-  }
-
-  if (!VALID_REASONING_EFFORTS.has(effort)) {
-    throw createHttpError(400, "Invalid reasoning.effort");
-  }
-}
-
-function validateMaxOutputTokens(maxOutputTokens: number | undefined): void {
-  if (maxOutputTokens == null) {
-    return;
-  }
-
-  if (!Number.isInteger(maxOutputTokens) || maxOutputTokens <= 0) {
-    throw createHttpError(400, "Invalid max_output_tokens");
-  }
-}
-
-async function streamOpenAIResponse(
-  response: ServerResponse,
-  runner: Runner,
-  coreInput: ServerCoreInput,
-  runOptions: RunOptions
-) {
-  response.statusCode = 200;
-  response.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-  response.setHeader("Cache-Control", "no-cache, no-transform");
-  response.setHeader("Connection", "keep-alive");
-
-  let finalResponse;
-  let hasError = false;
-
-  try {
-    for await (const event of runner.streamResponse(coreInput, runOptions)) {
-      if (event.type === "response.started" && event.response) {
-        writeSse(response, "response.created", {
-          id: event.response.id,
-          model: event.response.model,
-          object: "response",
-          status: "in_progress"
-        });
-        continue;
-      }
-
-      if (event.type === "response.output_text.delta") {
-        writeSse(response, "response.output_text.delta", {
-          delta: event.delta
-        });
-        continue;
-      }
-
-      if (event.type === "response.completed" && event.response) {
-        finalResponse = buildOpenAIResponse(event.response);
-        writeSse(response, "response.output_text.done", {
-          text: event.response.content
-        });
-        writeSse(response, "response.completed", finalResponse);
-      }
-    }
-  } catch (error) {
-    hasError = true;
-    writeSse(
-      response,
-      "response.failed",
-      createErrorBody("server_error", error instanceof Error ? error.message : String(error))
-    );
-  }
-
-  if (!hasError) {
-    response.write("data: [DONE]\n\n");
-  }
-  response.end();
-
-  return finalResponse;
-}
-
-async function readJsonBody(request: IncomingMessage): Promise<ResponsesRequestBody> {
-  const chunks: Buffer[] = [];
-  const maxBodySize = 10 * 1024 * 1024;
-  let totalSize = 0;
-
-  for await (const chunk of request) {
-    const buffer = Buffer.from(chunk);
-    totalSize += buffer.length;
-    if (totalSize > maxBodySize) {
-      throw createHttpError(413, "Request body too large");
-    }
-    chunks.push(buffer);
-  }
-
-  const rawBody = Buffer.concat(chunks).toString("utf8").trim();
-  if (!rawBody) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(rawBody) as ResponsesRequestBody;
-  } catch {
-    throw createHttpError(400, "Request body must be valid JSON");
-  }
-}
-
-function buildModelsResponse(models: string[]) {
-  return {
-    object: "list",
-    data: models.map(model => ({
-      id: model,
-      object: "model",
-      created: 0,
-      owned_by: "yadimon"
-    }))
-  };
-}
-
-function sendJson(response: ServerResponse, statusCode: number, body: unknown): void {
-  response.statusCode = statusCode;
-  response.setHeader("Content-Type", "application/json; charset=utf-8");
-  response.end(JSON.stringify(body));
-}
-
-function writeSse(response: ServerResponse, eventName: string, data: unknown): void {
-  response.write(`event: ${eventName}\n`);
-  response.write(`data: ${JSON.stringify(data)}\n\n`);
-}
-
-function createErrorBody(type: string, message: string) {
-  return {
-    error: {
-      type,
-      message
-    }
-  };
-}
-
-function createHttpError(statusCode: number, message: string): HttpError {
-  const error = new Error(message) as HttpError;
-  error.statusCode = statusCode;
-  return error;
-}
-
-function isHttpError(error: unknown): error is HttpError {
-  return error instanceof Error && "statusCode" in error && typeof (error as HttpError).statusCode === "number";
-}
-
-function isObjectWithInput(
-  input: ConversationInput
-): input is Extract<ConversationInput, { input?: ConversationInput }> {
-  return typeof input === "object" && input !== null && !Array.isArray(input) && "input" in input;
+  return Boolean(mockMode) && mockMode !== "off";
 }

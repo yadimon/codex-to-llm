@@ -4,47 +4,39 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  runResponse,
-  streamResponse
+  createCliArgReader,
+  runPrompt,
+  streamPrompt
 } from "./index.js";
-import type { ConversationInput, RunOptions } from "./types.js";
+import type { RunOptions, WebSearchMode } from "./types.js";
 
 const args = process.argv.slice(2);
+const { getArg, hasFlag } = createCliArgReader(args);
 export const HELP_TEXT = `codex-to-llm
 
 Usage:
   codex-to-llm --prompt "Hi"
-  codex-to-llm --input-file ./chat.json --json
-  codex-to-llm --stdin-json --stream --json
+  codex-to-llm --input-file ./prompt.txt --json
+  cat ./prompt.txt | codex-to-llm --stream --json
 
 Options:
   --prompt <text>
-  --input-json <json>
   --input-file <path>
-  --stdin-json
   --stream
   --json
+  --verbose
   --model <name>
   --reasoning-effort <level>
   --max-tokens <n>
   --sandbox <mode>
+  --search
+  --web-search <disabled|cached|live>
+  --ignore-rules
+  --ignore-user-config
   --auth-path <path>
   --config-home <path>
   --cwd <path>
   --cli <path>`;
-
-function getArg(name: string, fallback?: string): string | undefined {
-  const index = args.indexOf(name);
-  if (index !== -1 && args[index + 1]) {
-    return args[index + 1];
-  }
-
-  return fallback;
-}
-
-function hasFlag(name: string): boolean {
-  return args.includes(name);
-}
 
 async function readStdin(): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -53,46 +45,42 @@ async function readStdin(): Promise<string> {
     process.stdin.on("data", chunk => {
       input += chunk;
     });
-    process.stdin.on("end", () => resolve(input.trim()));
+    process.stdin.on("end", () => resolve(input));
     process.stdin.on("error", reject);
   });
 }
 
-async function readCliInput(): Promise<ConversationInput> {
+async function readCliInput(): Promise<string> {
   const inlinePrompt = getArg("--prompt");
-  if (inlinePrompt) {
+  if (inlinePrompt != null) {
     return inlinePrompt;
-  }
-
-  const inputJson = getArg("--input-json");
-  if (inputJson) {
-    return parseJsonInput(inputJson, "--input-json");
   }
 
   const inputFile = getArg("--input-file");
   if (inputFile) {
-    return parseJsonInput(fs.readFileSync(inputFile, "utf8"), "--input-file");
+    return fs.readFileSync(inputFile, "utf8");
   }
 
-  const stdinText = await readStdin();
-  if (!stdinText) {
-    throw new Error("Prompt or JSON input is required");
+  const stdinPrompt = await readStdin();
+  if (!stdinPrompt.length) {
+    throw new Error("Prompt input is required");
   }
 
-  if (hasFlag("--stdin-json")) {
-    return parseJsonInput(stdinText, "--stdin-json");
-  }
-
-  return stdinText;
+  return stdinPrompt;
 }
 
 function buildRunOptions(): RunOptions {
   const maxTokensArg = getArg("--max-tokens");
+  const webSearchArg = parseWebSearchArg(getArg("--web-search"));
+
   return {
     model: getArg("--model"),
     reasoningEffort: getArg("--reasoning-effort"),
     maxTokens: maxTokensArg ? Number.parseInt(maxTokensArg, 10) : undefined,
     sandbox: getArg("--sandbox"),
+    webSearch: webSearchArg || (hasFlag("--search") ? "live" : undefined),
+    ignoreRules: hasFlag("--ignore-rules"),
+    ignoreUserConfig: hasFlag("--ignore-user-config"),
     authPath: getArg("--auth-path"),
     configHome: getArg("--config-home"),
     cwd: getArg("--cwd"),
@@ -100,14 +88,17 @@ function buildRunOptions(): RunOptions {
   };
 }
 
-function parseJsonInput(raw: string, source: "--input-json" | "--input-file" | "--stdin-json"): ConversationInput {
-  try {
-    return JSON.parse(raw) as ConversationInput;
-  } catch {
-    throw new Error(`Invalid JSON for ${source}`);
+function parseWebSearchArg(value: string | undefined): WebSearchMode | undefined {
+  if (value == null) {
+    return undefined;
   }
-}
 
+  if (value === "disabled" || value === "cached" || value === "live") {
+    return value;
+  }
+
+  throw new Error('Invalid --web-search: expected "disabled", "cached", or "live"');
+}
 export async function main(): Promise<void> {
   if (hasFlag("--help") || hasFlag("-h")) {
     console.log(HELP_TEXT);
@@ -118,7 +109,7 @@ export async function main(): Promise<void> {
   const options = buildRunOptions();
 
   if (hasFlag("--stream")) {
-    for await (const event of streamResponse(input, options)) {
+    for await (const event of streamPrompt(input, options)) {
       if (hasFlag("--json")) {
         process.stdout.write(`${JSON.stringify(event)}\n`);
         continue;
@@ -131,7 +122,7 @@ export async function main(): Promise<void> {
     return;
   }
 
-  const result = await runResponse(input, options);
+  const result = await runPrompt(input, options);
   if (hasFlag("--json")) {
     console.log(JSON.stringify(result, null, 2));
     return;
@@ -146,7 +137,11 @@ const isDirectExecution = Boolean(invokedPath) && invokedPath === modulePath;
 
 if (isDirectExecution) {
   main().catch(error => {
-    console.error(error instanceof Error ? error.message : String(error));
+    if (hasFlag("--verbose") && error instanceof Error && error.stack) {
+      console.error(error.stack);
+    } else {
+      console.error(error instanceof Error ? error.message : String(error));
+    }
     process.exit(1);
   });
 }

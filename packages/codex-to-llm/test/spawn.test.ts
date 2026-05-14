@@ -26,3 +26,20 @@ test("resolveSpawnForPlatform executes directly on non-Windows platforms", () =>
   assert.equal(resolved.command, "/usr/local/bin/codex");
   assert.deepEqual(resolved.args, ["exec", "--json"]);
 });
+
+test("resolveSpawnForPlatform escapes embedded quotes in -c key=\"value\" args on Windows", () => {
+  const resolved = resolveSpawnForPlatform(
+    "codex",
+    ["-c", 'web_search="live"', "-c", 'model_reasoning_effort="low"'],
+    "win32"
+  );
+
+  assert.equal(resolved.command, "cmd.exe");
+  assert.equal(resolved.args[0], "/d");
+  assert.equal(resolved.args[1], "/s");
+  assert.equal(resolved.args[2], "/c");
+  assert.equal(
+    resolved.args[3],
+    'codex -c "web_search=""live""" -c "model_reasoning_effort=""low"""'
+  );
+});

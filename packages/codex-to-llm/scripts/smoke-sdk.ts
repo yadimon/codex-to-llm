@@ -1,14 +1,7 @@
-import { runResponse } from "../src/index.js";
+import { runPrompt } from "../src/index.js";
 
-const result = await runResponse(
-  {
-    messages: [
-      {
-        role: "user",
-        content: "Hi"
-      }
-    ]
-  },
+const result = await runPrompt(
+  "Hi",
   {
     model: "gpt-5.3-codex-spark",
     reasoningEffort: "low",

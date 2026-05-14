@@ -1,31 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { ConversationInput, RunOptions, StreamEvent } from "@yadimon/codex-to-llm";
+import type { RunOptions, StreamEvent } from "@yadimon/codex-to-llm";
 import {
   buildOpenAIResponse,
+  createServer,
   startServer
 } from "../src/index.js";
 
-function createStubRunner(calls: Array<{ input: ConversationInput; options: RunOptions }> = []) {
+function createStubRunner(calls: Array<{ prompt: string; options: RunOptions }> = []) {
   return {
-    async runResponse(input: ConversationInput, options: RunOptions = {}) {
-      calls.push({ input, options });
+    async runPrompt(prompt: string, options: RunOptions = {}) {
+      calls.push({ prompt, options });
       return {
         id: "resp_stub",
         model: options.model || "gpt-5.3-codex-spark",
-        instructions: typeof input === "object" && input && !Array.isArray(input) ? input.instructions : undefined,
-        messages: [
-          {
-            role: "user" as const,
-            content:
-              typeof input === "object" &&
-              input &&
-              !Array.isArray(input) &&
-              typeof input.input === "string"
-                ? input.input
-                : "hello"
-          }
-        ],
+        prompt,
         createdAt: 1,
         content: "hello world",
         usage: {
@@ -40,15 +29,14 @@ function createStubRunner(calls: Array<{ input: ConversationInput; options: RunO
         }
       };
     },
-    async *streamResponse(input: ConversationInput, options: RunOptions = {}): AsyncGenerator<StreamEvent> {
-      calls.push({ input, options });
+    async *streamPrompt(prompt: string, options: RunOptions = {}): AsyncGenerator<StreamEvent> {
+      calls.push({ prompt, options });
       yield {
         type: "response.started",
         response: {
           id: "resp_stream",
           model: options.model || "gpt-5.3-codex-spark",
-          instructions: typeof input === "object" && input && !Array.isArray(input) ? input.instructions : undefined,
-          messages: [],
+          prompt,
           createdAt: 1
         }
       };
@@ -61,19 +49,7 @@ function createStubRunner(calls: Array<{ input: ConversationInput; options: RunO
         response: {
           id: "resp_stream",
           model: options.model || "gpt-5.3-codex-spark",
-          instructions: typeof input === "object" && input && !Array.isArray(input) ? input.instructions : undefined,
-          messages: [
-            {
-              role: "user",
-              content:
-                typeof input === "object" &&
-                input &&
-                !Array.isArray(input) &&
-                typeof input.input === "string"
-                  ? input.input
-                  : "hello"
-            }
-          ],
+          prompt,
           createdAt: 1,
           content: "hello world",
           usage: {
@@ -97,8 +73,7 @@ test("buildOpenAIResponse maps core results into response objects", () => {
     id: "resp_1",
     createdAt: 1,
     model: "gpt-5.3-codex-spark",
-    instructions: undefined,
-    messages: [],
+    prompt: "Hello",
     content: "hello world",
     usage: {
       inputTokens: 11,
@@ -237,7 +212,7 @@ test("server rejects unsupported fields and enforces bearer auth on responses on
 });
 
 test("server forwards max_output_tokens and reasoning effort to the runner", async () => {
-  const calls: Array<{ input: ConversationInput; options: RunOptions }> = [];
+  const calls: Array<{ prompt: string; options: RunOptions }> = [];
   const started = await startServer({
     host: "127.0.0.1",
     port: 0,
@@ -265,6 +240,7 @@ test("server forwards max_output_tokens and reasoning effort to the runner", asy
     assert.equal(calls.length, 1);
     assert.equal(calls[0].options.maxTokens, 500);
     assert.equal(calls[0].options.reasoningEffort, "high");
+    assert.match(calls[0].prompt, /## Conversation/);
   } finally {
     await started.close();
   }
@@ -360,17 +336,16 @@ test("server does not send DONE after a streaming failure", async () => {
     host: "127.0.0.1",
     port: 0,
     runner: {
-      async runResponse() {
+      async runPrompt() {
         throw new Error("not used");
       },
-      async *streamResponse(): AsyncGenerator<StreamEvent> {
+      async *streamPrompt(): AsyncGenerator<StreamEvent> {
         yield {
           type: "response.started",
           response: {
             id: "resp_stream",
             model: "gpt-5.3-codex-spark",
-            instructions: undefined,
-            messages: [],
+            prompt: "Hello",
             createdAt: 1
           }
         };
@@ -394,6 +369,54 @@ test("server does not send DONE after a streaming failure", async () => {
 
     assert.equal(response.status, 200);
     assert.match(text, /event: response.failed/);
+    assert.doesNotMatch(text, /data: \[DONE\]/);
+  } finally {
+    await started.close();
+  }
+});
+
+test("server reports a failed SSE stream when no completed response arrives", async () => {
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    runner: {
+      async runPrompt() {
+        throw new Error("not used");
+      },
+      async *streamPrompt(): AsyncGenerator<StreamEvent> {
+        yield {
+          type: "response.started",
+          response: {
+            id: "resp_stream",
+            model: "gpt-5.3-codex-spark",
+            prompt: "Hello",
+            createdAt: 1
+          }
+        };
+        yield {
+          type: "response.output_text.delta",
+          delta: "partial"
+        };
+      }
+    }
+  });
+
+  try {
+    const response = await fetch(`${started.url}/v1/responses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        stream: true,
+        input: "Hello"
+      })
+    });
+    const text = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(text, /event: response.failed/);
+    assert.match(text, /Runner stream ended without a completed response/);
     assert.doesNotMatch(text, /data: \[DONE\]/);
   } finally {
     await started.close();
@@ -424,4 +447,243 @@ test("server rejects oversized request bodies", async () => {
   } finally {
     await started.close();
   }
+});
+
+test("mock-mode SSE emits response.created before any content event", async () => {
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    models: ["gpt-5.3-codex-spark"],
+    mockMode: true
+  });
+
+  try {
+    const response = await fetch(`${started.url}/v1/responses`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        stream: true,
+        model: "gpt-5.3-codex-spark",
+        input: "Hello"
+      })
+    });
+    const text = await response.text();
+    const createdIdx = text.indexOf("event: response.created");
+    const deltaIdx = text.indexOf("event: response.output_text.delta");
+    const completedIdx = text.indexOf("event: response.completed");
+
+    assert.equal(response.status, 200);
+    assert.notEqual(createdIdx, -1);
+    assert.notEqual(deltaIdx, -1);
+    assert.notEqual(completedIdx, -1);
+    assert.ok(createdIdx < deltaIdx);
+    assert.ok(deltaIdx < completedIdx);
+    assert.match(text, /data: \[DONE\]/);
+  } finally {
+    await started.close();
+  }
+});
+
+test("SSE: client disconnect aborts the runner stream", async () => {
+  let observedSignal: AbortSignal | undefined;
+  const aborts: string[] = [];
+
+  const stub = {
+    async runPrompt() {
+      throw new Error("not used");
+    },
+    async *streamPrompt(_: string, opts: RunOptions = {}): AsyncGenerator<StreamEvent> {
+      observedSignal = opts.signal;
+      yield {
+        type: "response.started",
+        response: {
+          id: "resp_abort",
+          model: "gpt-5.3-codex-spark",
+          prompt: "Hello",
+          createdAt: 1
+        }
+      };
+      yield { type: "response.output_text.delta", delta: "first" };
+      await new Promise<void>((_, reject) => {
+        opts.signal?.addEventListener("abort", () => {
+          aborts.push("aborted");
+          reject(new Error("aborted"));
+        });
+      });
+    }
+  };
+
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    runner: stub
+  });
+
+  try {
+    const controller = new AbortController();
+    const responsePromise = fetch(`${started.url}/v1/responses`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stream: true, input: "Hello" }),
+      signal: controller.signal
+    });
+    const response = await responsePromise;
+    const reader = response.body!.getReader();
+    await reader.read();
+    controller.abort();
+    try {
+      await reader.cancel();
+    } catch {
+      // expected
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal(aborts.length, 1, "runner should observe abort");
+    assert.ok(observedSignal, "stub should receive an AbortSignal");
+    assert.equal(observedSignal!.aborted, true);
+  } finally {
+    await started.close();
+  }
+});
+
+test("rejects unknown input object shapes with 400", async () => {
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    runner: createStubRunner()
+  });
+  try {
+    const cases: Array<{ body: unknown; expect: RegExp }> = [
+      { body: { input: { foo: 1 } }, expect: /must contain 'messages' or 'input'/ },
+      { body: { input: { input: { nested: true } } }, expect: /must be a string or an array/ },
+      { body: { input: 42 }, expect: /must be a string, a message array/ }
+    ];
+    for (const { body, expect } of cases) {
+      const response = await fetch(`${started.url}/v1/responses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      assert.equal(response.status, 400, `expected 400 for ${JSON.stringify(body)}`);
+      const text = await response.text();
+      assert.match(text, expect);
+    }
+  } finally {
+    await started.close();
+  }
+});
+
+test("createServer rejects empty models array at startup", () => {
+  assert.throws(
+    () => createServer({ models: [], runner: createStubRunner() }),
+    /No models configured/
+  );
+});
+
+test("createServer rejects whitespace-only CSV models at startup", () => {
+  const previous = process.env.CODEX_TO_LLM_SERVER_MODELS;
+  process.env.CODEX_TO_LLM_SERVER_MODELS = " , ,  ";
+  try {
+    assert.throws(
+      () => createServer({ runner: createStubRunner() }),
+      /No models configured/
+    );
+  } finally {
+    if (previous == null) {
+      delete process.env.CODEX_TO_LLM_SERVER_MODELS;
+    } else {
+      process.env.CODEX_TO_LLM_SERVER_MODELS = previous;
+    }
+  }
+});
+
+test("createServer rejects defaultModel outside the configured list", () => {
+  assert.throws(
+    () => createServer({
+      models: ["a", "b"],
+      defaultModel: "c",
+      runner: createStubRunner()
+    }),
+    /Default model "c" is not in the configured models list/
+  );
+});
+
+test("createServer trims whitespace in configured models", async () => {
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    models: " a , b ,c",
+    defaultModel: "a",
+    runner: createStubRunner()
+  });
+  try {
+    const models = await fetch(`${started.url}/v1/models`);
+    const json = (await models.json()) as { data: Array<{ id: string }> };
+    assert.deepEqual(json.data.map(m => m.id), ["a", "b", "c"]);
+  } finally {
+    await started.close();
+  }
+});
+
+test("emits a structured JSON log per successful request", async () => {
+  const previous = process.env.CODEX_TO_LLM_SERVER_LOG;
+  process.env.CODEX_TO_LLM_SERVER_LOG = "on";
+  const captured: string[] = [];
+  const origWrite = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
+    captured.push(String(chunk));
+    return origWrite(chunk as string, ...(rest as []));
+  }) as typeof process.stdout.write;
+
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    runner: createStubRunner()
+  });
+  try {
+    await fetch(`${started.url}/v1/responses`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.3-codex-spark", input: "Hello" })
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+  } finally {
+    await started.close();
+    process.stdout.write = origWrite;
+    if (previous == null) {
+      delete process.env.CODEX_TO_LLM_SERVER_LOG;
+    } else {
+      process.env.CODEX_TO_LLM_SERVER_LOG = previous;
+    }
+  }
+
+  const records = captured
+    .filter(c => c.startsWith("{"))
+    .flatMap(c => c.split("\n").filter(Boolean))
+    .map(line => {
+      try {
+        return JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    })
+    .filter((r): r is Record<string, unknown> => r != null);
+  const requestLog = records.find(r => r.msg === "request" && r.route === "POST /v1/responses");
+  assert.ok(requestLog, "expected a request log entry");
+  assert.equal(requestLog!.status, 200);
+  assert.equal(requestLog!.model, "gpt-5.3-codex-spark");
+  assert.equal(typeof requestLog!.latency_ms, "number");
+  assert.match(String(requestLog!.req_id), /^req_/);
+});
+
+test("startServer rejects invalid configured ports before listen", async () => {
+  await assert.rejects(
+    startServer({
+      host: "127.0.0.1",
+      port: Number.NaN,
+      runner: createStubRunner()
+    }),
+    /Invalid server port/
+  );
 });

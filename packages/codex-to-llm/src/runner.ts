@@ -1,26 +1,28 @@
 import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { normalizeConversationInput } from "./normalize.js";
-import { createEmptyUsage, isAgentMessageEvent, normalizeUsage, parseCodexEventLine } from "./parse.js";
+import {
+  createEmptyUsage,
+  isAgentMessageEvent,
+  isErrorEvent,
+  isTurnFailedEvent,
+  normalizeUsage,
+  parseCodexEventLine
+} from "./parse.js";
 import { assertCliPathExists, normalizeSpawnError } from "./platform.js";
 import { AsyncQueue } from "./queue.js";
-import { serializeConversationInput } from "./serialize.js";
 import { resolveSpawn } from "./spawn.js";
 import {
   createCodexHome,
   createWorkspace,
   cleanupDirectory
 } from "./workspace.js";
-import {
-  DEFAULT_MAX_TOKENS,
-  DEFAULT_MODEL,
-  DEFAULT_REASONING_EFFORT,
-  DEFAULT_SANDBOX
-} from "./types.js";
+import { terminate } from "./lifecycle.js";
+import { buildChildEnv } from "./env.js";
+import { buildCodexArgs } from "./codex-args.js";
+import { normalizeRunOptions } from "./options.js";
+import { appendBounded, buildAbortError, createCodexExitError } from "./exit.js";
 import type {
-  ConversationInput,
   CoreResponse,
-  NormalizedRunOptions,
   ResponseShell,
   RunOptions,
   Runner,
@@ -30,17 +32,17 @@ import type {
 
 export function createRunner(baseOptions: RunOptions = {}): Runner {
   return {
-    runResponse(input, options = {}) {
-      return runResponse(input, { ...baseOptions, ...options });
+    runPrompt(prompt, options = {}) {
+      return runPrompt(prompt, { ...baseOptions, ...options });
     },
-    streamResponse(input, options = {}) {
-      return streamResponse(input, { ...baseOptions, ...options });
+    streamPrompt(prompt, options = {}) {
+      return streamPrompt(prompt, { ...baseOptions, ...options });
     }
   };
 }
 
-export async function runResponse(input: ConversationInput, options: RunOptions = {}): Promise<CoreResponse> {
-  const stream = streamResponse(input, options);
+export async function runPrompt(prompt: string, options: RunOptions = {}): Promise<CoreResponse> {
+  const stream = streamPrompt(prompt, options);
   let completedResponse: CoreResponse | undefined;
 
   for await (const event of stream) {
@@ -56,17 +58,18 @@ export async function runResponse(input: ConversationInput, options: RunOptions 
   return completedResponse;
 }
 
-export function streamResponse(
-  input: ConversationInput,
-  options: RunOptions = {}
-): AsyncIterable<StreamEvent> {
-  const normalizedInput = normalizeConversationInput(input);
-  const prompt = serializeConversationInput(normalizedInput);
+export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIterable<StreamEvent> {
+  if (typeof prompt !== "string") {
+    throw new Error("Prompt must be a string");
+  }
+  if (!prompt.trim()) {
+    throw new Error("Prompt must not be empty");
+  }
+
   const normalizedOptions = normalizeRunOptions(options);
-  const { model, reasoningEffort, maxTokens, sandbox, timeoutMs } = normalizedOptions;
-  const cliPath =
-    options.cliPath || process.env.CODEX_TO_LLM_CLI_PATH || process.env.CODEX_CLI_PATH || "codex";
+  const { model, timeoutMs, cliPath } = normalizedOptions;
   assertCliPathExists(cliPath);
+
   const ownsWorkspace = !options.cwd;
   const ownsCodexHome = !options.configHome;
   let workspace: string | undefined;
@@ -93,55 +96,20 @@ export function streamResponse(
   let content = "";
   let stderr = "";
   let stdoutBuffer = "";
+  let lastErrorMessage = "";
   let usage: UsageSummary = createEmptyUsage();
 
-  const cliArgs = [
-    "exec",
-    "--json",
-    "--color",
-    "never",
-    "--sandbox",
-    sandbox,
-    "--ephemeral",
-    "-C",
-    workspace,
-    "--skip-git-repo-check",
-    "--disable",
-    "undo",
-    "--disable",
-    "shell_tool",
-    "--disable",
-    "child_agents_md",
-    "--disable",
-    "apply_patch_freeform",
-    "--disable",
-    "remote_models",
-    "--model",
-    model,
-    "-c",
-    `model_reasoning_effort="${reasoningEffort}"`,
-    "-c",
-    `model_max_output_tokens=${maxTokens}`,
-    "-"
-  ];
+  const cliArgs = buildCodexArgs(normalizedOptions, workspace);
 
   queue.push({
     type: "response.started",
-    response: createResponseShell({
-      responseId,
-      model,
-      normalizedInput,
-      startedAt
-    })
+    response: createResponseShell({ responseId, model, prompt, startedAt })
   });
 
   const spawnConfig = resolveSpawn(cliPath, cliArgs);
   const child: ChildProcessWithoutNullStreams = spawn(spawnConfig.command, spawnConfig.args, {
     cwd: workspace,
-    env: {
-      ...process.env,
-      CODEX_HOME: codexHome
-    },
+    env: buildChildEnv({ codexHome, envPassthrough: options.envPassthrough }),
     windowsHide: true
   });
   const timeoutHandle = setTimeout(() => {
@@ -150,35 +118,39 @@ export function streamResponse(
     }
   }, timeoutMs);
 
+  const signal = options.signal;
+  const onAbort = () => {
+    if (!settled) {
+      finalizeFailure(buildAbortError(signal));
+    }
+  };
+  if (signal) {
+    if (signal.aborted) {
+      setImmediate(onAbort);
+    } else {
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+  }
+
   function finalizeSuccess(): void {
     if (settled) {
       return;
     }
     settled = true;
     clearTimeout(timeoutHandle);
+    signal?.removeEventListener("abort", onAbort);
     flushStdoutBuffer();
 
     const response: CoreResponse = {
-      ...createResponseShell({
-        responseId,
-        model,
-        normalizedInput,
-        startedAt
-      }),
+      ...createResponseShell({ responseId, model, prompt, startedAt }),
       content,
       usage,
-      raw: {
-        stderr: stderr.trim(),
-        events: rawEvents
-      }
+      raw: { stderr: stderr.trim(), events: rawEvents }
     };
 
     cleanupDirectory(workspace, ownsWorkspace);
     cleanupDirectory(codexHome, ownsCodexHome);
-    queue.push({
-      type: "response.completed",
-      response
-    });
+    queue.push({ type: "response.completed", response });
     queue.close();
   }
 
@@ -188,20 +160,23 @@ export function streamResponse(
     }
     settled = true;
     clearTimeout(timeoutHandle);
-    if (!child.killed) {
-      child.kill();
-    }
+    signal?.removeEventListener("abort", onAbort);
     flushStdoutBuffer();
 
-    cleanupDirectory(workspace, ownsWorkspace);
-    cleanupDirectory(codexHome, ownsCodexHome);
-    queue.push({
-      type: "response.failed",
-      error: {
-        message: error.message
-      }
-    });
-    queue.fail(error);
+    queue.push({ type: "response.failed", error: { message: error.message } });
+
+    void terminate(child)
+      .catch(terminationError => {
+        const reason = terminationError instanceof Error
+          ? terminationError.message
+          : String(terminationError);
+        error.message = `${error.message} (termination failed: ${reason})`;
+      })
+      .finally(() => {
+        cleanupDirectory(workspace, ownsWorkspace);
+        cleanupDirectory(codexHome, ownsCodexHome);
+        queue.fail(error);
+      });
   }
 
   function flushStdoutBuffer(): void {
@@ -209,7 +184,6 @@ export function streamResponse(
       stdoutBuffer = "";
       return;
     }
-
     processStdoutLine(stdoutBuffer);
     stdoutBuffer = "";
   }
@@ -221,17 +195,19 @@ export function streamResponse(
     }
 
     rawEvents.push(event);
-    queue.push({
-      type: "response.raw_event",
-      event
-    });
+    queue.push({ type: "response.raw_event", event });
 
     if (isAgentMessageEvent(event)) {
       content = content ? `${content}\n\n${event.item.text}` : event.item.text;
-      queue.push({
-        type: "response.output_text.delta",
-        delta: event.item.text
-      });
+      queue.push({ type: "response.output_text.delta", delta: event.item.text });
+    }
+
+    if (isErrorEvent(event)) {
+      lastErrorMessage = event.message;
+    }
+
+    if (isTurnFailedEvent(event)) {
+      lastErrorMessage = event.error.message;
     }
 
     if (event.type === "turn.completed" && "usage" in event) {
@@ -273,13 +249,13 @@ export function streamResponse(
     finalizeFailure(normalizeSpawnError(error, cliPath));
   });
 
-  child.on("close", code => {
+  child.on("close", (code, signalCode) => {
     setImmediate(() => {
-      if (code && code !== 0) {
-        finalizeFailure(new Error(stderr.trim() || `Codex exited with code ${code}`));
+      const exitError = createCodexExitError(code, signalCode, stderr, lastErrorMessage);
+      if (exitError) {
+        finalizeFailure(exitError);
         return;
       }
-
       finalizeSuccess();
     });
   });
@@ -293,74 +269,10 @@ export function streamResponse(
   return queue;
 }
 
-export const execCodex = runResponse;
-
-const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
-const MAX_STDERR_LENGTH = 64 * 1024;
-const CLI_TOKEN_PATTERN = /^[A-Za-z0-9._:/-]+$/;
-
-export function normalizeRunOptions(options: RunOptions = {}): NormalizedRunOptions {
-  return {
-    model: normalizeCliToken(options.model, DEFAULT_MODEL, "model"),
-    reasoningEffort: normalizeCliToken(
-      options.reasoningEffort,
-      DEFAULT_REASONING_EFFORT,
-      "reasoning effort"
-    ),
-    maxTokens: normalizeMaxTokens(options.maxTokens),
-    sandbox: normalizeCliToken(options.sandbox, DEFAULT_SANDBOX, "sandbox"),
-    timeoutMs: normalizeTimeout(options.timeout)
-  };
-}
-
-function normalizeCliToken(value: string | undefined, fallback: string, fieldName: string): string {
-  const normalized = value || fallback;
-  if (!CLI_TOKEN_PATTERN.test(normalized) || normalized.startsWith("-")) {
-    throw new Error(
-      `Invalid ${fieldName}: expected letters, digits, dots, colons, slashes, underscores, or hyphens`
-    );
-  }
-
-  return normalized;
-}
-
-function normalizeTimeout(value: number | undefined): number {
-  if (value == null) {
-    return DEFAULT_TIMEOUT_MS;
-  }
-
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error("Invalid timeout: expected a positive finite number of milliseconds");
-  }
-
-  return Math.floor(value);
-}
-
-function normalizeMaxTokens(value: number | undefined): number {
-  if (value == null) {
-    return DEFAULT_MAX_TOKENS;
-  }
-
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error("Invalid maxTokens: expected a positive integer");
-  }
-
-  return value;
-}
-
-function appendBounded(current: string, nextChunk: string): string {
-  const combined = current + nextChunk;
-  if (combined.length <= MAX_STDERR_LENGTH) {
-    return combined;
-  }
-
-  const tailLength = MAX_STDERR_LENGTH - "\n[stderr truncated]".length;
-  return `${combined.slice(-tailLength)}\n[stderr truncated]`;
-}
+export const execCodex = runPrompt;
 
 function withCleanupPreserved(error: unknown, cleanupTasks: Array<() => void>): Error {
   const originalError = error instanceof Error ? error : new Error(String(error));
-
   for (const cleanupTask of cleanupTasks) {
     try {
       cleanupTask();
@@ -370,26 +282,24 @@ function withCleanupPreserved(error: unknown, cleanupTasks: Array<() => void>): 
       })`;
     }
   }
-
   return originalError;
 }
 
 function createResponseShell({
   responseId,
   model,
-  normalizedInput,
+  prompt,
   startedAt
 }: {
   responseId: string;
   model: string;
-  normalizedInput: ReturnType<typeof normalizeConversationInput>;
+  prompt: string;
   startedAt: number;
 }): ResponseShell {
   return {
     id: responseId,
     model,
-    instructions: normalizedInput.instructions,
-    messages: normalizedInput.messages,
+    prompt,
     createdAt: Math.floor(startedAt / 1000)
   };
 }
