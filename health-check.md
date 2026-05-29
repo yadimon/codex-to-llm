@@ -51,6 +51,7 @@
 - Windows cleanup of `dist/` can be racy; build scripts now retry, but this path deserves continued scrutiny.
 - The server package intentionally tracks the core package version range; releases that change core behavior should confirm the server dependency bump remains correct.
 - Direct API call mode is intentionally risk-gated; live smoke checks must set `CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK=1` and use local Codex auth.
+- Docker Desktop `29.2.1` on this workstation currently fails BuildKit builds before Dockerfile execution with `NotFound: forwarding Ping: no such job ...`; `DOCKER_BUILDKIT=0 npm run test:docker` verifies the same Docker e2e path.
 
 ## Decision Policy
 
@@ -67,15 +68,15 @@
 
 ## Latest Execution Evidence
 
-- Overall classification: `HEALTHY`
+- Overall classification: `AT_RISK`
 - Execution date: `2026-05-29`
 
 | ID | Status | Evidence |
 | --- | --- | --- |
-| HC-AUTO-001 | pending | run after the current implementation commit so the healthcheck evaluates a clean working tree |
-| HC-AUTO-002 | pending | run after the current implementation commit |
-| HC-AUTO-003 | pending | run after the current implementation commit |
-| HC-AUTO-004 | pending | run after the current implementation commit |
+| HC-AUTO-001 | pass | `git status --short` returned no output after commit `459f7f7` |
+| HC-AUTO-002 | pass | `npm run verify` exited `0` |
+| HC-AUTO-003 | pass | `npm run check` exited `0` |
+| HC-AUTO-004 | pass with local Docker workaround | `npm run test:docker` fails before Dockerfile execution with Docker Desktop BuildKit `NotFound: forwarding Ping: no such job ...`; `DOCKER_BUILDKIT=0 npm run test:docker` exited `0` |
 | HC-AUTO-005 | pass | `CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK=1 npm run smoke:direct-api` exited `0` and returned `content: "Hi"` |
 | HC-EXT-001 | pending | verify after release tags are pushed |
 | HC-EXT-002 | pending | verify after npm publish workflow completes |
