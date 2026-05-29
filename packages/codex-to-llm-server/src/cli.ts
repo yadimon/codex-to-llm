@@ -17,6 +17,7 @@ Usage:
 Options:
   --host <host>
   --port <port>
+  --backend <codex-exec|codex-oauth>
   --model <name>
   --api-key <value>
   --search
@@ -39,6 +40,7 @@ export async function main(): Promise<void> {
   const started = await startServer({
     host: getArg("--host"),
     port,
+    backend: parseBackendArg(getArg("--backend")),
     defaultModel: getArg("--model"),
     apiKey: getArg("--api-key"),
     webSearch: parseWebSearchArg(getArg("--web-search")) || (hasFlag("--search") ? "live" : undefined),
@@ -50,6 +52,16 @@ export async function main(): Promise<void> {
     cliPath: getArg("--cli")
   });
 
+  if (started.backend === "codex-oauth") {
+    console.warn(
+      [
+        "WARNING: codex-to-llm is running in ChatGPT/Codex subscription direct mode.",
+        "This mode uses your ChatGPT/Codex OAuth session to call the Codex Responses backend.",
+        "It is not the public OpenAI API-key endpoint. OpenAI may change, restrict, or block this behavior.",
+        "Use only with accounts you control. Do not expose this server to untrusted networks."
+      ].join("\n")
+    );
+  }
   console.log(`codex-to-llm-server listening on ${started.url}`);
 }
 
@@ -76,6 +88,16 @@ function parseWebSearchArg(value: string | undefined): WebSearchMode | undefined
   }
 
   throw new Error('Invalid --web-search: expected "disabled", "cached", or "live"');
+}
+
+function parseBackendArg(value: string | undefined): "codex-exec" | "codex-oauth" | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (value === "codex-exec" || value === "codex-oauth") {
+    return value;
+  }
+  throw new Error('Invalid --backend: expected "codex-exec" or "codex-oauth"');
 }
 
 const modulePath = fs.realpathSync.native(fileURLToPath(import.meta.url));

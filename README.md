@@ -1,9 +1,9 @@
 # codex-to-llm
 
-Monorepo for two npm packages built around the Codex CLI:
+Monorepo for two npm packages built around Codex auth:
 
-- `@yadimon/codex-to-llm`: raw prompt SDK and CLI around `codex exec`
-- `@yadimon/codex-to-llm-server`: OpenAI-compatible `/v1/responses` server that adapts dialog input on top of the raw core package
+- `@yadimon/codex-to-llm`: raw prompt SDK and CLI around `codex exec`, with an explicit direct API call bypass option
+- `@yadimon/codex-to-llm-server`: OpenAI-compatible `/v1/responses` server that adapts dialog input on top of the raw core package or direct Codex OAuth mode
 
 The package-level READMEs are the npm-facing docs:
 
@@ -13,7 +13,7 @@ The package-level READMEs are the npm-facing docs:
 ## Requirements
 
 - Node.js `>=20`
-- installed `codex` CLI in `PATH`
+- installed `codex` CLI in `PATH` for the default `codex exec` path
 - valid Codex auth in `~/.codex/auth.json` or `CODEX_TO_LLM_AUTH_PATH`
 
 ## Workspace Development

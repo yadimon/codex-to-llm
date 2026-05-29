@@ -33,6 +33,10 @@ Options:
   --web-search <disabled|cached|live>
   --ignore-rules
   --ignore-user-config
+  --direct-api-call
+  --confirm-direct-api-risk
+  --instructions <text>
+  --direct-api-endpoint <url>
   --auth-path <path>
   --config-home <path>
   --cwd <path>
@@ -81,6 +85,10 @@ function buildRunOptions(): RunOptions {
     webSearch: webSearchArg || (hasFlag("--search") ? "live" : undefined),
     ignoreRules: hasFlag("--ignore-rules"),
     ignoreUserConfig: hasFlag("--ignore-user-config"),
+    directApiCall: hasFlag("--direct-api-call"),
+    confirmDirectApiRisk: hasFlag("--confirm-direct-api-risk"),
+    directApiEndpoint: getArg("--direct-api-endpoint"),
+    directApiInstructions: getArg("--instructions"),
     authPath: getArg("--auth-path"),
     configHome: getArg("--config-home"),
     cwd: getArg("--cwd"),

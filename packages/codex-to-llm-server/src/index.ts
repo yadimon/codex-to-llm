@@ -1,8 +1,14 @@
 import { createServer as createHttpServer } from "node:http";
 import { assertAuthorized } from "./auth.js";
-import { normalizeServerPort, resolveModels } from "./config.js";
+import {
+  assertCodexOauthRiskAccepted,
+  normalizeServerPort,
+  resolveBackend,
+  resolveModels
+} from "./config.js";
 import {
   createErrorBody,
+  createHttpError,
   isHttpError,
   readJsonBody,
   sendJson
@@ -15,6 +21,7 @@ import {
 } from "./openai-format.js";
 import { requestToPrompt } from "./prompt.js";
 import { createDefaultRunner } from "./runners/default.js";
+import { createCodexOauthRunner } from "./runners/codex-oauth.js";
 import { createMockRunner } from "./runners/mock.js";
 import {
   DEFAULT_HOST,
@@ -48,11 +55,15 @@ export {
 } from "./http-io.js";
 export { assertAuthorized } from "./auth.js";
 export {
+  assertCodexOauthRiskAccepted,
+  CODEX_OAUTH_RISK_ENV,
   defaultRunnerOptions,
   normalizeServerPort,
+  resolveBackend,
   resolveModels
 } from "./config.js";
 export { createDefaultRunner } from "./runners/default.js";
+export { createCodexOauthRunner } from "./runners/codex-oauth.js";
 export { createMockRunner } from "./runners/mock.js";
 export {
   validateRequestedModel,
@@ -73,11 +84,10 @@ export type {
 export function createServer(options: ServerOptions = {}) {
   const host = options.host || process.env.CODEX_TO_LLM_SERVER_HOST || DEFAULT_HOST;
   const port = normalizeServerPort(options.port ?? process.env.CODEX_TO_LLM_SERVER_PORT ?? DEFAULT_PORT);
-  const runner =
-    options.runner ||
-    (resolveMockMode(options) ? createMockRunner(options) : createDefaultRunner(options));
-  const { models, defaultModel } = resolveModels(options);
   const apiKey = options.apiKey || process.env.CODEX_TO_LLM_SERVER_API_KEY;
+  const backend = resolveBackend(options);
+  const runner = options.runner || createConfiguredRunner(options, backend, host, apiKey);
+  const { models, defaultModel } = resolveModels(options);
 
   const server = createHttpServer(async (request, response) => {
     const reqId = newRequestId();
@@ -97,20 +107,29 @@ export function createServer(options: ServerOptions = {}) {
         const body = await readJsonBody(request);
         validateResponsesRequest(body);
         validateRequestedModel(body.model, models);
-        const prompt = requestToPrompt(body);
+        if (runner.directResponses && !body.instructions?.trim()) {
+          throw createHttpError(400, "instructions are required in codex-oauth direct mode");
+        }
+        const prompt = runner.directResponses
+          ? JSON.stringify({ instructions: body.instructions, input: body.input })
+          : requestToPrompt(body);
         const runOptions = requestToRunOptions(body, options, defaultModel);
+        const runnerOptions = {
+          ...runOptions,
+          responsesBody: body
+        } as typeof runOptions;
         runMeta.model = runOptions.model;
         runMeta.stream = !!body.stream;
         runMeta.prompt_chars = prompt.length;
 
         if (body.stream) {
-          const final = await streamOpenAIResponse(request, response, runner, prompt, runOptions);
+          const final = await streamOpenAIResponse(request, response, runner, prompt, runnerOptions);
           if (final?.usage) {
             runMeta.input_tokens = final.usage.input_tokens;
             runMeta.output_tokens = final.usage.output_tokens;
           }
         } else {
-          const result = await runner.runPrompt(prompt, runOptions);
+          const result = await runner.runPrompt(prompt, runnerOptions);
           runMeta.input_tokens = result.usage.inputTokens;
           runMeta.output_tokens = result.usage.outputTokens;
           sendJson(response, 200, buildOpenAIResponse(result));
@@ -148,6 +167,7 @@ export function createServer(options: ServerOptions = {}) {
 
 export async function startServer(options: ServerOptions = {}) {
   const { server, host, port } = createServer(options);
+  const backend = resolveBackend(options);
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -165,6 +185,7 @@ export async function startServer(options: ServerOptions = {}) {
     host,
     port: resolvedPort,
     url,
+    backend,
     server,
     close() {
       return new Promise<void>((resolve, reject) => {
@@ -183,4 +204,31 @@ export async function startServer(options: ServerOptions = {}) {
 function resolveMockMode(options: ServerOptions): boolean {
   const mockMode = options.mockMode || process.env.CODEX_TO_LLM_SERVER_MOCK_MODE;
   return Boolean(mockMode) && mockMode !== "off";
+}
+
+function createConfiguredRunner(
+  options: ServerOptions,
+  backend: "codex-exec" | "codex-oauth",
+  host: string,
+  apiKey: string | undefined
+) {
+  if (resolveMockMode(options)) {
+    return createMockRunner(options);
+  }
+  if (backend === "codex-oauth") {
+    assertCodexOauthRiskAccepted();
+    assertDirectModeBindIsProtected(host, apiKey);
+    return createCodexOauthRunner(options);
+  }
+  return createDefaultRunner(options);
+}
+
+function assertDirectModeBindIsProtected(host: string, apiKey: string | undefined): void {
+  if (host === "127.0.0.1" || host === "localhost" || host === "::1") {
+    return;
+  }
+  if (apiKey) {
+    return;
+  }
+  throw new Error("codex-oauth on non-local hosts requires CODEX_TO_LLM_SERVER_API_KEY");
 }

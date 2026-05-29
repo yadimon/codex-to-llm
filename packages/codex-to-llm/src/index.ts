@@ -10,4 +10,5 @@ export * from "./env.js";
 export * from "./codex-args.js";
 export * from "./options.js";
 export * from "./exit.js";
+export * from "./direct-api.js";
 export * from "./runner.js";

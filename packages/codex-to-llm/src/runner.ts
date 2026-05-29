@@ -21,6 +21,7 @@ import { buildChildEnv } from "./env.js";
 import { buildCodexArgs } from "./codex-args.js";
 import { normalizeRunOptions } from "./options.js";
 import { appendBounded, buildAbortError, createCodexExitError } from "./exit.js";
+import { runPromptDirectApi, streamPromptDirectApi } from "./direct-api.js";
 import type {
   CoreResponse,
   ResponseShell,
@@ -42,6 +43,10 @@ export function createRunner(baseOptions: RunOptions = {}): Runner {
 }
 
 export async function runPrompt(prompt: string, options: RunOptions = {}): Promise<CoreResponse> {
+  if (options.directApiCall) {
+    return runPromptDirectApi(prompt, options);
+  }
+
   const stream = streamPrompt(prompt, options);
   let completedResponse: CoreResponse | undefined;
 
@@ -59,6 +64,10 @@ export async function runPrompt(prompt: string, options: RunOptions = {}): Promi
 }
 
 export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIterable<StreamEvent> {
+  if (options.directApiCall) {
+    return streamPromptDirectApi(prompt, options);
+  }
+
   if (typeof prompt !== "string") {
     throw new Error("Prompt must be a string");
   }

@@ -28,6 +28,7 @@
     "test:docker": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server test:docker",
     "test:all": "tsx ./scripts/run-workspace-tests.ts && tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server test:docker",
     "smoke:core": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm smoke:sdk",
+    "smoke:direct-api": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm smoke:direct-api",
     "smoke:server": "tsx ./scripts/run-npm-workspace.ts @yadimon/codex-to-llm-server smoke",
     "smoke:published-core": "tsx ./scripts/smoke-published-core.ts",
     "smoke:published-server": "tsx ./scripts/smoke-published-server.ts",

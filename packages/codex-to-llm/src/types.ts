@@ -20,6 +20,10 @@ export interface RunOptions {
   webSearch?: WebSearchMode | boolean;
   ignoreRules?: boolean;
   ignoreUserConfig?: boolean;
+  directApiCall?: boolean;
+  confirmDirectApiRisk?: boolean;
+  directApiEndpoint?: string;
+  directApiInstructions?: string;
   signal?: AbortSignal;
   envPassthrough?: string[];
 }

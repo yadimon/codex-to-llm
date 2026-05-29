@@ -3,9 +3,9 @@
 ## Scope
 
 - Repository: `yadimon/codex-to-llm`
-- Objective: verify that the workspace is locally healthy, releasable, and aligned with the currently published `0.1.1` packages.
+- Objective: verify that the workspace is locally healthy, releasable, and aligned with the currently published package versions.
 - Baseline reference: current local `HEAD` at execution time
-- Last reviewed: `2026-04-15`
+- Last reviewed: `2026-05-29`
 
 ## Preconditions
 
@@ -35,13 +35,14 @@
 | HC-AUTO-002 | `npm run verify` | exit code `0` | critical |
 | HC-AUTO-003 | `npm run check` | exit code `0` | critical |
 | HC-AUTO-004 | `npm run test:docker` | exit code `0` | major |
+| HC-AUTO-005 | `CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK=1 npm run smoke:direct-api` | exit code `0`; output JSON has `mode: "direct-api-call"` and non-empty `content` | major |
 
 ## Manual or External Checks
 
 | ID | Method | Expected result | Severity |
 | --- | --- | --- | --- |
 | HC-EXT-001 | GitHub Actions API for recent runs | latest `CI` and release `Publish` runs are `success` | critical |
-| HC-EXT-002 | npm registry dist-tags | both public packages report `latest: 0.1.1` | critical |
+| HC-EXT-002 | npm registry dist-tags | both public packages report `latest` matching the most recent released package versions | critical |
 
 ## Known Weak Points
 
@@ -49,6 +50,7 @@
 - The package e2e checks are sensitive to CI platform behavior, especially executable fixtures on Unix and server startup synchronization.
 - Windows cleanup of `dist/` can be racy; build scripts now retry, but this path deserves continued scrutiny.
 - The server package intentionally tracks the core package version range; releases that change core behavior should confirm the server dependency bump remains correct.
+- Direct API call mode is intentionally risk-gated; live smoke checks must set `CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK=1` and use local Codex auth.
 
 ## Decision Policy
 
@@ -66,13 +68,14 @@
 ## Latest Execution Evidence
 
 - Overall classification: `HEALTHY`
-- Execution date: `2026-04-15`
+- Execution date: `2026-05-29`
 
 | ID | Status | Evidence |
 | --- | --- | --- |
-| HC-AUTO-001 | pass | `git status --short` returned no output on the local `HEAD` reviewed on `2026-04-15` |
-| HC-AUTO-002 | pass | `npm run verify` exited `0` after lint, typecheck, tests, e2e, and both workspace builds |
-| HC-AUTO-003 | pass | `npm run check` exited `0` after `verify`, `pack`, and `publish:dry-run` for both packages |
-| HC-AUTO-004 | pass | `npm run test:docker` exited `0` and rebuilt the server image successfully |
-| HC-EXT-001 | pass | GitHub API reports latest `CI` on `main` and both `Publish` runs for `codex-to-llm-v0.1.1` and `codex-to-llm-server-v0.1.1` as `success` |
-| HC-EXT-002 | pass | npm registry `dist-tags.latest` equals `0.1.1` for both `@yadimon/codex-to-llm` and `@yadimon/codex-to-llm-server` |
+| HC-AUTO-001 | pending | run after the current implementation commit so the healthcheck evaluates a clean working tree |
+| HC-AUTO-002 | pending | run after the current implementation commit |
+| HC-AUTO-003 | pending | run after the current implementation commit |
+| HC-AUTO-004 | pending | run after the current implementation commit |
+| HC-AUTO-005 | pass | `CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK=1 npm run smoke:direct-api` exited `0` and returned `content: "Hi"` |
+| HC-EXT-001 | pending | verify after release tags are pushed |
+| HC-EXT-002 | pending | verify after npm publish workflow completes |

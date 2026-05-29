@@ -2,6 +2,9 @@ import type { RunOptions, WebSearchMode } from "@yadimon/codex-to-llm";
 import { DEFAULT_MODEL } from "@yadimon/codex-to-llm";
 import type { ServerOptions } from "./types.js";
 
+export const DEFAULT_BACKEND = "codex-exec";
+export const CODEX_OAUTH_RISK_ENV = "CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK";
+
 export function resolveModels(options: ServerOptions): { models: string[]; defaultModel: string } {
   const list = parseModelList(options);
   if (list.length === 0) {
@@ -45,6 +48,23 @@ export function normalizeServerPort(value: number | string): number {
   }
 
   return numericPort;
+}
+
+export function resolveBackend(options: ServerOptions): "codex-exec" | "codex-oauth" {
+  const value = options.backend || process.env.CODEX_TO_LLM_BACKEND || DEFAULT_BACKEND;
+  if (value === "codex-exec" || value === "codex-oauth") {
+    return value;
+  }
+  throw new Error("Invalid CODEX_TO_LLM_BACKEND: expected codex-exec or codex-oauth");
+}
+
+export function assertCodexOauthRiskAccepted(): void {
+  if (process.env[CODEX_OAUTH_RISK_ENV] === "1") {
+    return;
+  }
+  throw new Error(
+    `ChatGPT/Codex subscription direct mode requires ${CODEX_OAUTH_RISK_ENV}=1`
+  );
 }
 
 export function defaultRunnerOptions(options: ServerOptions): RunOptions {

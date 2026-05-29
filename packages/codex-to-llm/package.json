@@ -41,6 +41,7 @@
     "publish:dry-run": "npm publish --dry-run",
     "release:check": "tsx ./scripts/release-check.ts",
     "smoke:cli": "tsx ./src/cli.ts --prompt \"Hi\" --json --model gpt-5.3-codex-spark",
+    "smoke:direct-api": "tsx ./scripts/smoke-direct-api.ts",
     "smoke:sdk": "tsx ./scripts/smoke-sdk.ts",
     "prepack": "npm run test && npm run build",
     "test": "tsx ./scripts/run-node-tests.ts",

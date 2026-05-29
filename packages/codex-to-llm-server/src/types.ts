@@ -61,6 +61,7 @@ export interface ResponsesRequestBody {
 }
 
 export interface Runner {
+  directResponses?: boolean;
   runPrompt(prompt: string, options?: RunOptions): Promise<CoreResponse>;
   streamPrompt(prompt: string, options?: RunOptions): AsyncIterable<StreamEvent>;
 }
@@ -71,6 +72,8 @@ export interface ServerOptions extends RunOptions {
   models?: string[] | string;
   defaultModel?: string;
   apiKey?: string;
+  backend?: "codex-exec" | "codex-oauth";
+  codexOauthEndpoint?: string;
   mockMode?: string | boolean;
   runner?: Runner;
 }

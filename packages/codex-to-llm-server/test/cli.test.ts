@@ -6,6 +6,7 @@ import { HELP_TEXT } from "../src/cli.js";
 test("CLI help documents host and auth flags", () => {
   assert.match(HELP_TEXT, /codex-to-llm-server/);
   assert.match(HELP_TEXT, /--host <host>/);
+  assert.match(HELP_TEXT, /--backend <codex-exec\|codex-oauth>/);
   assert.match(HELP_TEXT, /--api-key <value>/);
   assert.match(HELP_TEXT, /--search/);
   assert.match(HELP_TEXT, /--web-search <disabled\|cached\|live>/);
