@@ -68,15 +68,15 @@
 
 ## Latest Execution Evidence
 
-- Overall classification: `AT_RISK`
+- Overall classification: `HEALTHY`
 - Execution date: `2026-05-29`
 
 | ID | Status | Evidence |
 | --- | --- | --- |
-| HC-AUTO-001 | pass | `git status --short` returned no output after commit `459f7f7` |
+| HC-AUTO-001 | pass | `git status --short` returned no output after release commit `e7f6db4` |
 | HC-AUTO-002 | pass | `npm run verify` exited `0` |
 | HC-AUTO-003 | pass | `npm run check` exited `0` |
 | HC-AUTO-004 | pass with local Docker workaround | `npm run test:docker` fails before Dockerfile execution with Docker Desktop BuildKit `NotFound: forwarding Ping: no such job ...`; `DOCKER_BUILDKIT=0 npm run test:docker` exited `0` |
 | HC-AUTO-005 | pass | `CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK=1 npm run smoke:direct-api` exited `0` and returned `content: "Hi"` |
-| HC-EXT-001 | pending | verify after release tags are pushed |
-| HC-EXT-002 | pending | verify after npm publish workflow completes |
+| HC-EXT-001 | pass | GitHub Actions completed successfully for `CI` run `26662291120`, core `Publish` run `26662291214`, and server `Publish` run `26662291113` |
+| HC-EXT-002 | pass | npm registry reports `latest: 1.0.3` for `@yadimon/codex-to-llm` and `@yadimon/codex-to-llm-server` |
