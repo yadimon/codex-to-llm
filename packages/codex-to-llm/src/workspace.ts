@@ -79,6 +79,7 @@ export function createCodexHome(options: { authPath?: string; configHome?: strin
 
   const config = [
     'web_search = "disabled"',
+    'sqlite_home = ":memory:"',
     "[mcp_servers]",
     "[features]",
     "shell_snapshot = false",
@@ -87,7 +88,9 @@ export function createCodexHome(options: { authPath?: string; configHome?: strin
     "apps = false",
     "plugins = false",
     "js_repl = false",
-    "prevent_idle_sleep = false"
+    "prevent_idle_sleep = false",
+    "[history]",
+    'persistence = "none"'
   ].join("\n");
   fs.writeFileSync(path.join(rootDir, "config.toml"), `${config}\n`, "utf8");
 

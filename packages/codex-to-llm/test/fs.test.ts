@@ -51,6 +51,8 @@ test("createCodexHome writes auth and config files", () => {
   assert.equal(createdHome, configHome);
   assert.equal(fs.readFileSync(path.join(configHome, "auth.json"), "utf8"), "{\"token\":\"x\"}\n");
   assert.match(configToml, /web_search = "disabled"/);
+  assert.match(configToml, /sqlite_home = ":memory:"/);
+  assert.match(configToml, /\[history\]\npersistence = "none"/);
   assert.match(configToml, /plugins = false/);
   assert.doesNotMatch(configToml, /steer = false/);
 

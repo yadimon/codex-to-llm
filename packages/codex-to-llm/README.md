@@ -137,7 +137,7 @@ It performs the minimal direct API call with Codex auth, user-supplied instructi
 
 ## Runtime Configuration
 
-The wrapper creates an isolated temporary `CODEX_HOME` and workspace by default. Its generated `config.toml` keeps web search disabled unless you opt in with `webSearch`, `--search`, `--web-search`, or `CODEX_TO_LLM_WEB_SEARCH`.
+The wrapper creates an isolated per-run `CODEX_HOME` and workspace by default. Its generated `config.toml` keeps web search disabled unless you opt in with `webSearch`, `--search`, `--web-search`, or `CODEX_TO_LLM_WEB_SEARCH`. It also runs `codex exec --ephemeral`, disables Codex history persistence, and sets `sqlite_home = ":memory:"` so Codex runtime SQLite state does not create disk-backed SQLite/WAL files during normal runs.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -152,7 +152,8 @@ The wrapper creates an isolated temporary `CODEX_HOME` and workspace by default.
 | `CODEX_TO_LLM_CODEX_USER_AGENT` | `codex-cli/0.140.0` | Direct-mode `User-Agent` header. |
 | `CODEX_TO_LLM_REASONING_EFFORT` | `low` | Default reasoning effort passed to Codex. |
 | `CODEX_TO_LLM_SANDBOX` | `read-only` | Sandbox mode passed to Codex. |
-| `CODEX_TO_LLM_CONFIG_HOME` | temp dir | Temporary Codex config directory for a run. |
+| `CODEX_TO_LLM_HOME_BASE` | platform data dir | Base directory for generated per-run Codex homes. Point this at a RAM disk to keep the remaining short-lived Codex home files off persistent storage. |
+| `CODEX_TO_LLM_CONFIG_HOME` | generated per-run dir | Explicit Codex config directory for a run. When set, the wrapper does not delete it automatically. |
 | `CODEX_TO_LLM_WORKSPACE` | temp dir | Workspace directory passed to Codex. |
 | `CODEX_TO_LLM_LOCAL_HOME` | `.codex-to-llm/` | Local directory used by the auth copy helper. |
 

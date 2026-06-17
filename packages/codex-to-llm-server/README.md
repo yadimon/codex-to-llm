@@ -134,7 +134,8 @@ curl http://127.0.0.1:3000/v1/responses \
 | `CODEX_TO_LLM_CODEX_USER_AGENT` | `codex-cli/0.140.0` | Direct-mode `User-Agent` header. |
 | `CODEX_TO_LLM_AUTH_PATH` | `~/.codex/auth.json` | Path to the Codex auth file. |
 | `CODEX_TO_LLM_CLI_PATH` | `codex` | Path to the Codex CLI binary. |
-| `CODEX_TO_LLM_CONFIG_HOME` | temp dir | Temporary Codex config directory for a run. |
+| `CODEX_TO_LLM_HOME_BASE` | platform data dir | Base directory for generated per-run Codex homes. Point this at a RAM disk to keep the remaining short-lived Codex home files off persistent storage. |
+| `CODEX_TO_LLM_CONFIG_HOME` | generated per-run dir | Explicit Codex config directory for a run. When set, the wrapper does not delete it automatically. |
 | `CODEX_TO_LLM_WORKSPACE` | temp dir | Workspace directory used for Codex execution. |
 | `CODEX_TO_LLM_WEB_SEARCH` | `disabled` | Web search mode forwarded to the core runner. |
 | `CODEX_TO_LLM_IGNORE_RULES` | `false` | When truthy, pass `--ignore-rules` to the core runner. |
@@ -149,6 +150,7 @@ curl http://127.0.0.1:3000/v1/responses \
 - `max_output_tokens` and `reasoning.effort` are forwarded to the core runner
 - in `codex-oauth` mode, `reasoning.effort` is forwarded but `max_output_tokens` is stripped from the upstream request
 - server CLI supports `--search`, `--web-search`, `--ignore-rules`, and `--ignore-user-config`
+- the default `codex-exec` runner uses the core package's isolated per-run Codex home, `--ephemeral`, disabled history persistence, and in-memory SQLite runtime state
 - unsupported request fields such as `tools`, `tool_choice`, or `input_image` return `400`
 - the server owns prompt adaptation for `instructions` and multi-message dialog input before calling the raw core runner
 - streaming emits one `response.output_text.delta` per Codex `agent_message`, not per token; clients expecting token-level deltas will see one large delta followed by `response.completed`
