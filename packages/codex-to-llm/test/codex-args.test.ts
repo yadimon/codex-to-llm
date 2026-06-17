@@ -13,7 +13,7 @@ test("buildCodexArgs always includes hardening flags", () => {
   for (const flag of ["--ephemeral", "--skip-git-repo-check", "--json"]) {
     assert.ok(args.includes(flag), `expected ${flag} to be present`);
   }
-  for (const disabled of ["undo", "shell_tool", "child_agents_md", "apply_patch_freeform", "remote_models"]) {
+  for (const disabled of ["undo", "shell_tool", "child_agents_md", "apply_patch_freeform", "remote_models", "plugins"]) {
     assert.ok(args.includes(disabled), `expected --disable ${disabled} to be present`);
   }
 });

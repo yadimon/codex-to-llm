@@ -148,8 +148,8 @@ The wrapper creates an isolated temporary `CODEX_HOME` and workspace by default.
 | `CODEX_TO_LLM_IGNORE_USER_CONFIG` | `false` | When truthy, pass `--ignore-user-config` to `codex exec`. |
 | `CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK` | - | Must be `1` when using `--direct-api-call` without `--confirm-direct-api-risk`. |
 | `CODEX_TO_LLM_DIRECT_API_ENDPOINT` | `https://chatgpt.com/backend-api/codex/responses` | Direct-mode upstream endpoint override. |
-| `CODEX_TO_LLM_CODEX_CLIENT_VERSION` | `0.134.0` | Direct-mode `Version` header. |
-| `CODEX_TO_LLM_CODEX_USER_AGENT` | `codex-cli/0.134.0` | Direct-mode `User-Agent` header. |
+| `CODEX_TO_LLM_CODEX_CLIENT_VERSION` | `0.140.0` | Direct-mode `Version` header. |
+| `CODEX_TO_LLM_CODEX_USER_AGENT` | `codex-cli/0.140.0` | Direct-mode `User-Agent` header. |
 | `CODEX_TO_LLM_REASONING_EFFORT` | `low` | Default reasoning effort passed to Codex. |
 | `CODEX_TO_LLM_SANDBOX` | `read-only` | Sandbox mode passed to Codex. |
 | `CODEX_TO_LLM_CONFIG_HOME` | temp dir | Temporary Codex config directory for a run. |

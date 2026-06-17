@@ -130,8 +130,8 @@ curl http://127.0.0.1:3000/v1/responses \
 | `CODEX_TO_LLM_BACKEND` | `codex-exec` | Backend runner. Use `codex-oauth` for direct ChatGPT/Codex subscription mode. |
 | `CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK` | - | Must be `1` to start `codex-oauth` mode. |
 | `CODEX_TO_LLM_CODEX_OAUTH_ENDPOINT` | `https://chatgpt.com/backend-api/codex/responses` | Direct-mode upstream endpoint override for tests or experiments. |
-| `CODEX_TO_LLM_CODEX_CLIENT_VERSION` | `0.134.0` | Direct-mode `Version` header. |
-| `CODEX_TO_LLM_CODEX_USER_AGENT` | `codex-cli/0.134.0` | Direct-mode `User-Agent` header. |
+| `CODEX_TO_LLM_CODEX_CLIENT_VERSION` | `0.140.0` | Direct-mode `Version` header. |
+| `CODEX_TO_LLM_CODEX_USER_AGENT` | `codex-cli/0.140.0` | Direct-mode `User-Agent` header. |
 | `CODEX_TO_LLM_AUTH_PATH` | `~/.codex/auth.json` | Path to the Codex auth file. |
 | `CODEX_TO_LLM_CLI_PATH` | `codex` | Path to the Codex CLI binary. |
 | `CODEX_TO_LLM_CONFIG_HOME` | temp dir | Temporary Codex config directory for a run. |

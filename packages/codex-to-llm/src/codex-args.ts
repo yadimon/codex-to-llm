@@ -34,6 +34,8 @@ export function buildCodexArgs(options: NormalizedRunOptions, workspace: string)
     "apply_patch_freeform",
     "--disable",
     "remote_models",
+    "--disable",
+    "plugins",
     "--model",
     model,
     "-c",

@@ -85,6 +85,7 @@ export function createCodexHome(options: { authPath?: string; configHome?: strin
     "unified_exec = false",
     "multi_agent = false",
     "apps = false",
+    "plugins = false",
     "js_repl = false",
     "prevent_idle_sleep = false"
   ].join("\n");
