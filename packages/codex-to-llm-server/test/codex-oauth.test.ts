@@ -114,6 +114,44 @@ test("codex-oauth runner calls the Codex Responses endpoint directly", async () 
   }
 });
 
+test("codex-oauth runner forwards multimodal image input to Codex", async () => {
+  const authPath = writeTempAuth({ tokens: { access_token: "test-access-token" } });
+  const upstream = await startFakeCodexUpstream();
+  const imageUrl = "data:image/png;base64,iVBORw0KGgo=";
+
+  try {
+    const runner = createCodexOauthRunner({ authPath, endpoint: upstream.url });
+    await runner.runPrompt("", {
+      model: "gpt-5.6-luna",
+      reasoningEffort: "high",
+      responsesBody: {
+        model: "gpt-5.6-luna",
+        instructions: "Inspect the attached screenshot.",
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: "Is a consent banner visible?" },
+              { type: "input_image", image_url: imageUrl }
+            ]
+          }
+        ]
+      }
+    });
+
+    const input = upstream.requests[0].body.input as Array<{
+      content: Array<Record<string, string>>;
+    }>;
+    assert.deepEqual(input[0].content[1], {
+      type: "input_image",
+      image_url: imageUrl
+    });
+  } finally {
+    await upstream.close();
+    fs.rmSync(path.dirname(authPath), { recursive: true, force: true });
+  }
+});
+
 test("server selects codex-oauth backend only after risk acknowledgement", () => {
   const previousBackend = process.env.CODEX_TO_LLM_BACKEND;
   const previousAck = process.env.CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK;

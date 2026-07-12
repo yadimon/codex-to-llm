@@ -3,8 +3,8 @@ import {
   SUPPORTED_ROLES,
   TEXT_BLOCK_TYPES,
   type ConversationMessageInput,
+  type MessageContentBlock,
   type MessageRole,
-  type MessageTextBlock,
   type ResponsesRequestBody,
   type ServerPromptInput
 } from "./types.js";
@@ -109,7 +109,7 @@ function normalizeMessage(
   };
 }
 
-function normalizeMessageContent(content: string | MessageTextBlock[], label: string): string {
+function normalizeMessageContent(content: string | MessageContentBlock[], label: string): string {
   if (typeof content === "string") {
     return normalizeText(content, label);
   }
@@ -119,6 +119,9 @@ function normalizeMessageContent(content: string | MessageTextBlock[], label: st
   const blocks = content.map((block, index) => {
     if (!block || typeof block !== "object") {
       throw createHttpError(400, `${label} block ${index} must be an object`);
+    }
+    if (block.type === "input_image") {
+      throw createHttpError(400, `${label} image blocks require the codex-oauth backend`);
     }
     if (!TEXT_BLOCK_TYPES.has(block.type) || typeof block.text !== "string") {
       throw createHttpError(400, `${label} block ${index} must be a supported text block`);

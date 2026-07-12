@@ -574,6 +574,41 @@ test("rejects unknown input object shapes with 400", async () => {
   }
 });
 
+test("codex-exec rejects image blocks instead of silently dropping vision input", async () => {
+  const started = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    backend: "codex-exec",
+    runner: createStubRunner()
+  });
+  try {
+    const response = await fetch(`${started.url}/v1/responses`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: "Describe the image" },
+              {
+                type: "input_image",
+                image_url:
+                  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
+              }
+            ]
+          }
+        ]
+      })
+    });
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /image blocks require the codex-oauth backend/);
+  } finally {
+    await started.close();
+  }
+});
+
 test("createServer rejects empty models array at startup", () => {
   assert.throws(
     () => createServer({ models: [], runner: createStubRunner() }),

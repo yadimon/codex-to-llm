@@ -23,6 +23,11 @@ export type MessageTextBlock = {
   type: "text" | "input_text" | "output_text";
   text: string;
 };
+export type MessageImageBlock = {
+  type: "input_image";
+  image_url: string;
+};
+export type MessageContentBlock = MessageTextBlock | MessageImageBlock;
 export const TEXT_BLOCK_TYPES = new Set<MessageTextBlock["type"]>([
   "text",
   "input_text",
@@ -31,7 +36,7 @@ export const TEXT_BLOCK_TYPES = new Set<MessageTextBlock["type"]>([
 
 export type ConversationMessageInput = {
   role?: MessageRole;
-  content: string | MessageTextBlock[];
+  content: string | MessageContentBlock[];
 };
 
 export type ResponsesInput =

@@ -3,8 +3,8 @@ import * as fs from "node:fs";
 import { resolveAuthPath, type CoreResponse, type RunOptions, type StreamEvent } from "@yadimon/codex-to-llm";
 import type {
   ConversationMessageInput,
+  MessageContentBlock,
   MessageRole,
-  MessageTextBlock,
   ResponsesInput,
   ResponsesRequestBody,
   Runner,
@@ -240,19 +240,30 @@ function normalizeRole(role: MessageRole, index: number): MessageRole {
 }
 
 function textBlocksToCodexContent(
-  content: string | MessageTextBlock[],
+  content: string | MessageContentBlock[],
   index: number
-): Array<Record<string, string>> {
+): Array<Record<string, unknown>> {
   if (typeof content === "string") {
     return [{ type: "input_text", text: content }];
   }
   if (!Array.isArray(content)) {
     throw new Error(`Message at index ${index} must contain text content`);
   }
-  return content.map(block => ({
-    type: block.type === "output_text" ? "output_text" : "input_text",
-    text: block.text
-  }));
+  return content.map((block, blockIndex) => {
+    if (block.type === "input_image") {
+      if (typeof block.image_url !== "string" || !block.image_url.trim()) {
+        throw new Error(`Image block ${blockIndex} in message ${index} requires image_url`);
+      }
+      if (!/^(?:data:image\/(?:png|jpeg|webp);base64,|https:\/\/)/i.test(block.image_url)) {
+        throw new Error(`Image block ${blockIndex} in message ${index} has unsupported image_url`);
+      }
+      return { type: "input_image", image_url: block.image_url };
+    }
+    return {
+      type: block.type === "output_text" ? "output_text" : "input_text",
+      text: block.text
+    };
+  });
 }
 
 async function* readSseJsonEvents(response: Response): AsyncIterable<Record<string, unknown>> {
