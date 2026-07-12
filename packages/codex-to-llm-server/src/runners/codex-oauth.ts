@@ -12,8 +12,8 @@ import type {
 } from "../types.js";
 
 export const DEFAULT_CODEX_OAUTH_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
-const DEFAULT_CODEX_CLIENT_VERSION = "0.140.0";
-const DEFAULT_CODEX_USER_AGENT = "codex-cli/0.140.0";
+const DEFAULT_CODEX_CLIENT_VERSION = "0.144.1";
+const DEFAULT_CODEX_USER_AGENT = "codex-cli/0.144.1";
 
 type FetchLike = typeof fetch;
 type DirectRunOptions = RunOptions & { responsesBody?: ResponsesRequestBody };

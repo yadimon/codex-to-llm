@@ -12,8 +12,8 @@ import {
 export const DEFAULT_DIRECT_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
 export const DIRECT_API_RISK_ENV = "CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK";
 
-const DEFAULT_CODEX_CLIENT_VERSION = "0.140.0";
-const DEFAULT_CODEX_USER_AGENT = "codex-cli/0.140.0";
+const DEFAULT_CODEX_CLIENT_VERSION = "0.144.1";
+const DEFAULT_CODEX_USER_AGENT = "codex-cli/0.144.1";
 
 type FetchLike = typeof fetch;
 

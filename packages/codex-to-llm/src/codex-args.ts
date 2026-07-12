@@ -29,8 +29,6 @@ export function buildCodexArgs(options: NormalizedRunOptions, workspace: string)
     "--disable",
     "shell_tool",
     "--disable",
-    "child_agents_md",
-    "--disable",
     "apply_patch_freeform",
     "--disable",
     "remote_models",

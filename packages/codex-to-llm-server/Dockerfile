@@ -1,6 +1,6 @@
 FROM node:22-bookworm-slim AS build
 
-ARG CODEX_CLI_PACKAGE=@openai/codex@0.140.0
+ARG CODEX_CLI_PACKAGE=@openai/codex@0.144.1
 WORKDIR /app
 
 COPY package.json ./package.json
@@ -15,7 +15,7 @@ RUN npm run build
 
 FROM node:22-bookworm-slim
 
-ARG CODEX_CLI_PACKAGE=@openai/codex@0.140.0
+ARG CODEX_CLI_PACKAGE=@openai/codex@0.144.1
 ENV NODE_ENV=production
 ENV CODEX_TO_LLM_SERVER_HOST=0.0.0.0
 ENV CODEX_TO_LLM_SERVER_PORT=3000

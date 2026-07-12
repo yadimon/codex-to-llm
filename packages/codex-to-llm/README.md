@@ -148,8 +148,8 @@ The wrapper creates an isolated per-run `CODEX_HOME` and workspace by default. I
 | `CODEX_TO_LLM_IGNORE_USER_CONFIG` | `false` | When truthy, pass `--ignore-user-config` to `codex exec`. |
 | `CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK` | - | Must be `1` when using `--direct-api-call` without `--confirm-direct-api-risk`. |
 | `CODEX_TO_LLM_DIRECT_API_ENDPOINT` | `https://chatgpt.com/backend-api/codex/responses` | Direct-mode upstream endpoint override. |
-| `CODEX_TO_LLM_CODEX_CLIENT_VERSION` | `0.140.0` | Direct-mode `Version` header. |
-| `CODEX_TO_LLM_CODEX_USER_AGENT` | `codex-cli/0.140.0` | Direct-mode `User-Agent` header. |
+| `CODEX_TO_LLM_CODEX_CLIENT_VERSION` | `0.144.1` | Direct-mode `Version` header. |
+| `CODEX_TO_LLM_CODEX_USER_AGENT` | `codex-cli/0.144.1` | Direct-mode `User-Agent` header. |
 | `CODEX_TO_LLM_REASONING_EFFORT` | `low` | Default reasoning effort passed to Codex. |
 | `CODEX_TO_LLM_SANDBOX` | `read-only` | Sandbox mode passed to Codex. |
 | `CODEX_TO_LLM_HOME_BASE` | platform data dir | Base directory for generated per-run Codex homes. Point this at a RAM disk to keep the remaining short-lived Codex home files off persistent storage. |
