@@ -110,6 +110,7 @@ export function createServer(options: ServerOptions = {}) {
         if (runner.directResponses && !body.instructions?.trim()) {
           throw createHttpError(400, "instructions are required in codex-oauth direct mode");
         }
+        runner.validateDirectInput?.(body);
         const prompt = runner.directResponses
           ? JSON.stringify({ instructions: body.instructions, input: body.input })
           : requestToPrompt(body);

@@ -1,14 +1,17 @@
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import { resolveAuthPath, type CoreResponse, type RunOptions, type StreamEvent } from "@yadimon/codex-to-llm";
-import type {
-  ConversationMessageInput,
-  MessageContentBlock,
-  MessageRole,
-  ResponsesInput,
-  ResponsesRequestBody,
-  Runner,
-  ServerOptions
+import { createHttpError } from "../http-io.js";
+import {
+  IMAGE_DETAIL_VALUES,
+  TEXT_BLOCK_TYPES,
+  type ConversationMessageInput,
+  type MessageContentBlock,
+  type MessageRole,
+  type ResponsesInput,
+  type ResponsesRequestBody,
+  type Runner,
+  type ServerOptions
 } from "../types.js";
 
 export const DEFAULT_CODEX_OAUTH_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
@@ -31,6 +34,9 @@ export function createCodexOauthRunner(options: ServerOptions & {
 
   return {
     directResponses: true,
+    validateDirectInput(body) {
+      toCodexInput(body.input);
+    },
     async runPrompt(prompt, requestOptions = {}) {
       let completedResponse: CoreResponse | undefined;
       for await (const event of streamCodexOauthResponse({
@@ -212,18 +218,37 @@ function toCodexInput(input: ResponsesInput | undefined): unknown[] {
     return input.map((message, index) => toCodexMessage(message, index));
   }
   if (input && typeof input === "object") {
-    const messages = input.messages ?? input.input;
-    if (typeof messages === "string") {
-      return [toCodexMessage({ role: "user", content: messages }, 0)];
+    const messages: unknown[] = [];
+    if (input.messages != null) {
+      messages.push(...normalizeInputField(input.messages, "input.messages"));
     }
-    if (Array.isArray(messages)) {
-      return messages.map((message, index) => toCodexMessage(message, index));
+    if (input.input != null) {
+      messages.push(...normalizeInputField(input.input, "input.input"));
+    }
+    if (messages.length > 0) {
+      return messages;
     }
   }
-  throw new Error("Codex direct mode requires string input or message input");
+  throw createHttpError(400, "Codex direct mode requires string input or message input");
+}
+
+function normalizeInputField(
+  value: string | ConversationMessageInput[],
+  label: string
+): unknown[] {
+  if (typeof value === "string") {
+    return [toCodexMessage({ role: "user", content: value }, 0)];
+  }
+  if (Array.isArray(value)) {
+    return value.map((message, index) => toCodexMessage(message, index));
+  }
+  throw createHttpError(400, `${label} must be a string or an array of messages`);
 }
 
 function toCodexMessage(message: ConversationMessageInput, index: number): Record<string, unknown> {
+  if (!message || typeof message !== "object") {
+    throw createHttpError(400, `Message at index ${index} must be an object`);
+  }
   const role = message.role || "user";
   return {
     type: "message",
@@ -236,7 +261,7 @@ function normalizeRole(role: MessageRole, index: number): MessageRole {
   if (role === "system" || role === "developer" || role === "user" || role === "assistant") {
     return role;
   }
-  throw new Error(`Unsupported message role at index ${index}: ${String(role)}`);
+  throw createHttpError(400, `Unsupported message role at index ${index}: ${String(role)}`);
 }
 
 function textBlocksToCodexContent(
@@ -247,23 +272,70 @@ function textBlocksToCodexContent(
     return [{ type: "input_text", text: content }];
   }
   if (!Array.isArray(content)) {
-    throw new Error(`Message at index ${index} must contain text content`);
+    throw createHttpError(400, `Message at index ${index} must contain text content`);
   }
   return content.map((block, blockIndex) => {
+    if (!block || typeof block !== "object") {
+      throw createHttpError(400, `Content block ${blockIndex} in message ${index} must be an object`);
+    }
     if (block.type === "input_image") {
-      if (typeof block.image_url !== "string" || !block.image_url.trim()) {
-        throw new Error(`Image block ${blockIndex} in message ${index} requires image_url`);
-      }
-      if (!/^(?:data:image\/(?:png|jpeg|webp);base64,|https:\/\/)/i.test(block.image_url)) {
-        throw new Error(`Image block ${blockIndex} in message ${index} has unsupported image_url`);
-      }
-      return { type: "input_image", image_url: block.image_url };
+      return imageBlockToCodexContent(block, index, blockIndex);
+    }
+    if (!TEXT_BLOCK_TYPES.has(block.type) || typeof block.text !== "string") {
+      throw createHttpError(
+        400,
+        `Content block ${blockIndex} in message ${index} must be a supported text block`
+      );
     }
     return {
       type: block.type === "output_text" ? "output_text" : "input_text",
       text: block.text
     };
   });
+}
+
+function imageBlockToCodexContent(
+  block: MessageContentBlock & { type: "input_image" },
+  index: number,
+  blockIndex: number
+): Record<string, unknown> {
+  const location = `Image block ${blockIndex} in message ${index}`;
+  if ("file_id" in block && (block as { file_id?: unknown }).file_id != null) {
+    throw createHttpError(400, `${location} uses file_id, which is not supported; provide image_url instead`);
+  }
+  if (typeof block.image_url !== "string" || !block.image_url.trim()) {
+    throw createHttpError(400, `${location} requires image_url`);
+  }
+  if (!isSupportedImageUrl(block.image_url)) {
+    throw createHttpError(400, `${location} has unsupported image_url`);
+  }
+  const result: Record<string, unknown> = { type: "input_image", image_url: block.image_url };
+  if (block.detail != null) {
+    if (!IMAGE_DETAIL_VALUES.has(block.detail)) {
+      throw createHttpError(400, `${location} has unsupported detail: ${String(block.detail)}`);
+    }
+    result.detail = block.detail;
+  }
+  return result;
+}
+
+const BASE64_PAYLOAD = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+function isSupportedImageUrl(url: string): boolean {
+  const dataMatch = /^data:image\/(?:png|jpeg|gif|webp);base64,(.+)$/i.exec(url);
+  if (dataMatch) {
+    const payload = dataMatch[1];
+    return payload.length >= 4 && payload.length % 4 === 0 && BASE64_PAYLOAD.test(payload);
+  }
+  if (/^https:\/\//i.test(url)) {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === "https:" && parsed.hostname.length > 0;
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 async function* readSseJsonEvents(response: Response): AsyncIterable<Record<string, unknown>> {

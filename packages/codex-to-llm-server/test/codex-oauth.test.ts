@@ -152,6 +152,332 @@ test("codex-oauth runner forwards multimodal image input to Codex", async () => 
   }
 });
 
+test("codex-oauth runner forwards image detail to Codex", async () => {
+  const authPath = writeTempAuth({ tokens: { access_token: "test-access-token" } });
+  const upstream = await startFakeCodexUpstream();
+  const imageUrl = "data:image/png;base64,iVBORw0KGgo=";
+
+  try {
+    const runner = createCodexOauthRunner({ authPath, endpoint: upstream.url });
+    await runner.runPrompt("", {
+      model: "gpt-5.6-luna",
+      responsesBody: {
+        model: "gpt-5.6-luna",
+        instructions: "Inspect the attached screenshot.",
+        input: [
+          {
+            role: "user",
+            content: [{ type: "input_image", image_url: imageUrl, detail: "high" }]
+          }
+        ]
+      }
+    });
+
+    const input = upstream.requests[0].body.input as Array<{
+      content: Array<Record<string, string>>;
+    }>;
+    assert.deepEqual(input[0].content[0], {
+      type: "input_image",
+      image_url: imageUrl,
+      detail: "high"
+    });
+  } finally {
+    await upstream.close();
+    fs.rmSync(path.dirname(authPath), { recursive: true, force: true });
+  }
+});
+
+test("codex-oauth runner accepts gif image input", async () => {
+  const authPath = writeTempAuth({ tokens: { access_token: "test-access-token" } });
+  const upstream = await startFakeCodexUpstream();
+  const imageUrl = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+
+  try {
+    const runner = createCodexOauthRunner({ authPath, endpoint: upstream.url });
+    await runner.runPrompt("", {
+      model: "gpt-5.6-luna",
+      responsesBody: {
+        model: "gpt-5.6-luna",
+        instructions: "Inspect the attached image.",
+        input: [
+          {
+            role: "user",
+            content: [{ type: "input_image", image_url: imageUrl }]
+          }
+        ]
+      }
+    });
+
+    const input = upstream.requests[0].body.input as Array<{
+      content: Array<Record<string, string>>;
+    }>;
+    assert.deepEqual(input[0].content[0], { type: "input_image", image_url: imageUrl });
+  } finally {
+    await upstream.close();
+    fs.rmSync(path.dirname(authPath), { recursive: true, force: true });
+  }
+});
+
+async function withOauthServer(
+  endpoint: string,
+  authPath: string,
+  run: (baseUrl: string) => Promise<void>
+): Promise<void> {
+  const previousAck = process.env.CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK;
+  const previousAuthPath = process.env.CODEX_TO_LLM_AUTH_PATH;
+  process.env.CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK = "1";
+  process.env.CODEX_TO_LLM_AUTH_PATH = authPath;
+
+  const created = createServer({
+    host: "127.0.0.1",
+    port: 0,
+    backend: "codex-oauth",
+    codexOauthEndpoint: endpoint
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    created.server.once("error", reject);
+    created.server.listen(0, "127.0.0.1", () => {
+      created.server.off("error", reject);
+      resolve();
+    });
+  });
+
+  try {
+    const address = created.server.address();
+    assert.ok(address && typeof address === "object");
+    await run(`http://127.0.0.1:${address.port}`);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      created.server.close(error => (error ? reject(error) : resolve()));
+    });
+    if (previousAck == null) delete process.env.CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK;
+    else process.env.CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK = previousAck;
+    if (previousAuthPath == null) delete process.env.CODEX_TO_LLM_AUTH_PATH;
+    else process.env.CODEX_TO_LLM_AUTH_PATH = previousAuthPath;
+  }
+}
+
+test("server direct mode rejects unsupported image_url with 400 before streaming", async () => {
+  const authPath = writeTempAuth({ tokens: { access_token: "test-access-token" } });
+  const upstream = await startFakeCodexUpstream();
+
+  try {
+    await withOauthServer(upstream.url, authPath, async baseUrl => {
+      const response = await fetch(`${baseUrl}/v1/responses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gpt-5.3-codex-spark",
+          instructions: "Inspect it.",
+          stream: true,
+          input: [
+            { role: "user", content: [{ type: "input_image", image_url: "ftp://x/y.png" }] }
+          ]
+        })
+      });
+
+      assert.equal(response.status, 400);
+      assert.match(await response.text(), /image_url/);
+      assert.equal(upstream.requests.length, 0);
+    });
+  } finally {
+    await upstream.close();
+    fs.rmSync(path.dirname(authPath), { recursive: true, force: true });
+  }
+});
+
+test("server direct mode rejects unsupported image_url with 400 for sync requests", async () => {
+  const authPath = writeTempAuth({ tokens: { access_token: "test-access-token" } });
+  const upstream = await startFakeCodexUpstream();
+
+  try {
+    await withOauthServer(upstream.url, authPath, async baseUrl => {
+      const response = await fetch(`${baseUrl}/v1/responses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gpt-5.3-codex-spark",
+          instructions: "Inspect it.",
+          input: [
+            { role: "user", content: [{ type: "input_image", image_url: "" }] }
+          ]
+        })
+      });
+
+      assert.equal(response.status, 400);
+      assert.match(await response.text(), /image_url/);
+      assert.equal(upstream.requests.length, 0);
+    });
+  } finally {
+    await upstream.close();
+    fs.rmSync(path.dirname(authPath), { recursive: true, force: true });
+  }
+});
+
+test("server direct mode rejects file_id image blocks with an explicit 400", async () => {
+  const authPath = writeTempAuth({ tokens: { access_token: "test-access-token" } });
+  const upstream = await startFakeCodexUpstream();
+
+  try {
+    await withOauthServer(upstream.url, authPath, async baseUrl => {
+      const response = await fetch(`${baseUrl}/v1/responses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gpt-5.3-codex-spark",
+          instructions: "Inspect it.",
+          input: [
+            { role: "user", content: [{ type: "input_image", file_id: "file-123" }] }
+          ]
+        })
+      });
+
+      assert.equal(response.status, 400);
+      assert.match(await response.text(), /file_id/);
+      assert.equal(upstream.requests.length, 0);
+    });
+  } finally {
+    await upstream.close();
+    fs.rmSync(path.dirname(authPath), { recursive: true, force: true });
+  }
+});
+
+test("server direct mode rejects a null message entry with 400", async () => {
+  const authPath = writeTempAuth({ tokens: { access_token: "test-access-token" } });
+  const upstream = await startFakeCodexUpstream();
+
+  try {
+    await withOauthServer(upstream.url, authPath, async baseUrl => {
+      const response = await fetch(`${baseUrl}/v1/responses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gpt-5.3-codex-spark",
+          instructions: "Answer.",
+          input: [null]
+        })
+      });
+
+      assert.equal(response.status, 400);
+      assert.equal(upstream.requests.length, 0);
+    });
+  } finally {
+    await upstream.close();
+    fs.rmSync(path.dirname(authPath), { recursive: true, force: true });
+  }
+});
+
+test("server direct mode rejects a text block with non-string text with 400", async () => {
+  const authPath = writeTempAuth({ tokens: { access_token: "test-access-token" } });
+  const upstream = await startFakeCodexUpstream();
+
+  try {
+    await withOauthServer(upstream.url, authPath, async baseUrl => {
+      const response = await fetch(`${baseUrl}/v1/responses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gpt-5.3-codex-spark",
+          instructions: "Answer.",
+          input: [{ role: "user", content: [{ type: "input_text", text: 42 }] }]
+        })
+      });
+
+      assert.equal(response.status, 400);
+      assert.equal(upstream.requests.length, 0);
+    });
+  } finally {
+    await upstream.close();
+    fs.rmSync(path.dirname(authPath), { recursive: true, force: true });
+  }
+});
+
+test("server direct mode rejects a bare https image_url with 400", async () => {
+  const authPath = writeTempAuth({ tokens: { access_token: "test-access-token" } });
+  const upstream = await startFakeCodexUpstream();
+
+  try {
+    await withOauthServer(upstream.url, authPath, async baseUrl => {
+      const response = await fetch(`${baseUrl}/v1/responses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gpt-5.3-codex-spark",
+          instructions: "Inspect it.",
+          input: [{ role: "user", content: [{ type: "input_image", image_url: "https://" }] }]
+        })
+      });
+
+      assert.equal(response.status, 400);
+      assert.match(await response.text(), /image_url/);
+      assert.equal(upstream.requests.length, 0);
+    });
+  } finally {
+    await upstream.close();
+    fs.rmSync(path.dirname(authPath), { recursive: true, force: true });
+  }
+});
+
+test("server direct mode rejects malformed base64 image_url with 400", async () => {
+  const authPath = writeTempAuth({ tokens: { access_token: "test-access-token" } });
+  const upstream = await startFakeCodexUpstream();
+
+  try {
+    await withOauthServer(upstream.url, authPath, async baseUrl => {
+      for (const badUrl of ["data:image/png;base64,A", "data:image/png;base64,AAA=="]) {
+        const response = await fetch(`${baseUrl}/v1/responses`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "gpt-5.3-codex-spark",
+            instructions: "Inspect it.",
+            input: [{ role: "user", content: [{ type: "input_image", image_url: badUrl }] }]
+          })
+        });
+
+        assert.equal(response.status, 400);
+        assert.match(await response.text(), /image_url/);
+      }
+      assert.equal(upstream.requests.length, 0);
+    });
+  } finally {
+    await upstream.close();
+    fs.rmSync(path.dirname(authPath), { recursive: true, force: true });
+  }
+});
+
+test("codex-oauth runner forwards both messages and input entries to Codex", async () => {
+  const authPath = writeTempAuth({ tokens: { access_token: "test-access-token" } });
+  const upstream = await startFakeCodexUpstream();
+  const imageUrl = "data:image/png;base64,iVBORw0KGgo=";
+
+  try {
+    const runner = createCodexOauthRunner({ authPath, endpoint: upstream.url });
+    await runner.runPrompt("", {
+      model: "gpt-5.6-luna",
+      responsesBody: {
+        model: "gpt-5.6-luna",
+        instructions: "Inspect them.",
+        input: {
+          messages: [{ role: "user", content: "context turn" }],
+          input: [{ role: "user", content: [{ type: "input_image", image_url: imageUrl }] }]
+        }
+      }
+    });
+
+    const input = upstream.requests[0].body.input as Array<{
+      content: Array<Record<string, unknown>>;
+    }>;
+    assert.equal(input.length, 2);
+    assert.deepEqual(input[0].content[0], { type: "input_text", text: "context turn" });
+    assert.deepEqual(input[1].content[0], { type: "input_image", image_url: imageUrl });
+  } finally {
+    await upstream.close();
+    fs.rmSync(path.dirname(authPath), { recursive: true, force: true });
+  }
+});
+
 test("server selects codex-oauth backend only after risk acknowledgement", () => {
   const previousBackend = process.env.CODEX_TO_LLM_BACKEND;
   const previousAck = process.env.CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK;

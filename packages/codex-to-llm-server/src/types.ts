@@ -23,10 +23,13 @@ export type MessageTextBlock = {
   type: "text" | "input_text" | "output_text";
   text: string;
 };
+export type MessageImageDetail = "low" | "high" | "auto";
 export type MessageImageBlock = {
   type: "input_image";
   image_url: string;
+  detail?: MessageImageDetail;
 };
+export const IMAGE_DETAIL_VALUES = new Set<MessageImageDetail>(["low", "high", "auto"]);
 export type MessageContentBlock = MessageTextBlock | MessageImageBlock;
 export const TEXT_BLOCK_TYPES = new Set<MessageTextBlock["type"]>([
   "text",
@@ -67,6 +70,7 @@ export interface ResponsesRequestBody {
 
 export interface Runner {
   directResponses?: boolean;
+  validateDirectInput?(body: ResponsesRequestBody): void;
   runPrompt(prompt: string, options?: RunOptions): Promise<CoreResponse>;
   streamPrompt(prompt: string, options?: RunOptions): AsyncIterable<StreamEvent>;
 }
