@@ -6,6 +6,7 @@ packages/*/dist/
 .codex-to-llm/
 .codex-minimal/
 tmp-auth/
+.tmp-*
 .idea/
 *.tsbuildinfo*
 review.md
