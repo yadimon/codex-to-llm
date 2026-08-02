@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import * as net from "node:net";
 
-const VERSION = process.env.SMOKE_PUBLISHED_VERSION || "1.0.0";
+const VERSION = process.env.SMOKE_PUBLISHED_VERSION || "latest";
 const PROMPT = process.env.SMOKE_PUBLISHED_PROMPT || "Reply with the single word OK and nothing else.";
 const MODEL = process.env.SMOKE_PUBLISHED_MODEL || "gpt-5.3-codex-spark";
 const TIMEOUT_MS = Number(process.env.SMOKE_PUBLISHED_TIMEOUT_MS || 180_000);
