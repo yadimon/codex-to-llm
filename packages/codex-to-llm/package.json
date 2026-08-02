@@ -1,7 +1,7 @@
 {
   "name": "@yadimon/codex-to-llm",
   "version": "1.0.6",
-  "description": "Use Codex as a simple LLM provider through an SDK and CLI",
+  "description": "Run stateless Codex prompts from Node.js or the CLI using local Codex authentication",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
