@@ -1,6 +1,6 @@
 {
   "name": "@yadimon/codex-to-llm-server",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Expose local Codex authentication through a Responses-compatible HTTP server",
   "type": "module",
   "main": "./dist/index.js",
@@ -49,7 +49,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@yadimon/codex-to-llm": "^1.0.6"
+    "@yadimon/codex-to-llm": "^1.0.7"
   },
   "keywords": [
     "codex",

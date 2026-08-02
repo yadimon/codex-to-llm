@@ -1,6 +1,6 @@
 {
   "name": "@yadimon/codex-to-llm",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Run stateless Codex prompts from Node.js or the CLI using local Codex authentication",
   "type": "module",
   "main": "./dist/index.js",
