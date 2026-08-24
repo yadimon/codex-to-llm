@@ -8,7 +8,7 @@ const PACKAGE_NAME = "@yadimon/codex-to-llm-server";
 const VERSION_SPEC = process.env.SMOKE_PUBLISHED_VERSION || "latest";
 const VISION = process.env.SMOKE_PUBLISHED_VISION === "1" || process.argv.includes("--vision");
 const BLUE_PNG_DATA_URL =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgnABdNvJ8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ2oPcf88OIhvJ6vAAAAAElFTkSuQmCC";
 const PROMPT = process.env.SMOKE_PUBLISHED_PROMPT || (
   VISION
     ? "What is the dominant color of this image? Reply with one lowercase word."
