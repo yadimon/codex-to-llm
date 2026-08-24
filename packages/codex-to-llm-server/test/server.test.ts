@@ -574,12 +574,13 @@ test("rejects unknown input object shapes with 400", async () => {
   }
 });
 
-test("codex-exec rejects image blocks instead of silently dropping vision input", async () => {
+test("codex-exec forwards image blocks to the core runner", async () => {
+  const calls: Array<{ prompt: string; options: RunOptions }> = [];
   const started = await startServer({
     host: "127.0.0.1",
     port: 0,
     backend: "codex-exec",
-    runner: createStubRunner()
+    runner: createStubRunner(calls)
   });
   try {
     const response = await fetch(`${started.url}/v1/responses`, {
@@ -593,8 +594,8 @@ test("codex-exec rejects image blocks instead of silently dropping vision input"
               { type: "input_text", text: "Describe the image" },
               {
                 type: "input_image",
-                image_url:
-                  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
+                image_url: "data:image/png;base64," +
+                  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC"
               }
             ]
           }
@@ -602,8 +603,15 @@ test("codex-exec rejects image blocks instead of silently dropping vision input"
       })
     });
 
-    assert.equal(response.status, 400);
-    assert.match(await response.text(), /image blocks require the codex-oauth backend/);
+    assert.equal(response.status, 200, await response.text());
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].options.images, [
+      {
+        type: "base64",
+        mediaType: "image/png",
+        data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC"
+      }
+    ]);
   } finally {
     await started.close();
   }

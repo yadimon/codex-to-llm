@@ -61,3 +61,14 @@ test("buildCodexArgs forwards model and sandbox values", () => {
   const sandboxIdx = args.indexOf("--sandbox");
   assert.equal(args[sandboxIdx + 1], "read-only");
 });
+
+test("buildCodexArgs forwards each prepared image through --image", () => {
+  const args = buildCodexArgs(normalizeRunOptions(), "/tmp/ws", [
+    "/tmp/one.png",
+    "/tmp/two.webp"
+  ]);
+  assert.deepEqual(
+    args.flatMap((arg, index) => arg === "--image" ? [args[index + 1]] : []),
+    ["/tmp/one.png", "/tmp/two.webp"]
+  );
+});

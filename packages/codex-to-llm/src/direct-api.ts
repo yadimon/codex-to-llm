@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import { resolveAuthPath } from "./workspace.js";
+import { createResponsesImageContent } from "./images.js";
 import {
   DEFAULT_MODEL,
   type CoreResponse,
@@ -38,7 +39,7 @@ export async function* streamPromptDirectApi(
   options: RunOptions = {},
   fetchImpl: FetchLike = fetch
 ): AsyncIterable<StreamEvent> {
-  validateDirectApiPrompt(prompt);
+  validateDirectApiPrompt(prompt, options);
   assertDirectApiRiskConfirmed(options);
   assertDirectApiInstructions(options);
 
@@ -127,11 +128,11 @@ export function assertDirectApiInstructions(options: RunOptions = {}): void {
   throw new Error("Direct API call mode requires --instructions with user-supplied instructions");
 }
 
-function validateDirectApiPrompt(prompt: string): void {
+function validateDirectApiPrompt(prompt: string, options: RunOptions): void {
   if (typeof prompt !== "string") {
     throw new Error("Prompt must be a string");
   }
-  if (!prompt.trim()) {
+  if (!prompt.trim() && (!Array.isArray(options.images) || options.images.length === 0)) {
     throw new Error("Prompt must not be empty");
   }
 }
@@ -179,12 +180,9 @@ function buildDirectApiBody(prompt: string, options: RunOptions): Record<string,
       {
         type: "message",
         role: "user",
-        content: [
-          {
-            type: "input_text",
-            text: prompt
-          }
-        ]
+        content: createResponsesImageContent(prompt, options.images, {
+          baseDir: options.cwd || process.cwd()
+        })
       }
     ],
     stream: true,

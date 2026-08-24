@@ -1,6 +1,6 @@
 # @yadimon/codex-to-llm
 
-Run a stateless prompt through your local Codex sign-in from Node.js or the command line.
+Run a stateless text or image prompt through your local Codex sign-in from Node.js or the command line.
 
 The package is useful when you need model output inside a script without starting an interactive coding-agent session. It keeps the interface deliberately small: prompt in, text and usage out.
 
@@ -34,6 +34,14 @@ console.log(result.content);
 console.log(result.usage);
 ```
 
+Attach local files, HTTPS URLs, or base64 images through the recommended `codex exec` backend:
+
+```js
+const result = await runPrompt("What is visible in this image?", {
+  images: [{ type: "file", path: "./screenshot.png" }]
+});
+```
+
 `runPrompt()` returns:
 
 ```ts
@@ -59,6 +67,7 @@ console.log(result.usage);
 npx @yadimon/codex-to-llm --prompt "Return only the word OK."
 npx @yadimon/codex-to-llm --input-file ./prompt.txt --json
 npx @yadimon/codex-to-llm --input-file ./prompt.txt --stream --json
+npx @yadimon/codex-to-llm --prompt "Describe this image." --image ./screenshot.png
 ```
 
 Run `npx @yadimon/codex-to-llm --help` for the full option list.
@@ -122,7 +131,7 @@ This is the recommended mode. For each call the package:
 
 1. copies the selected Codex auth file into an isolated per-run `CODEX_HOME`;
 2. creates a temporary workspace unless `cwd` is supplied;
-3. runs `codex exec --ephemeral` with JSON output;
+3. validates and materializes any image inputs, then runs `codex exec --ephemeral --image <file>` with JSON output;
 4. disables history persistence, shell/tool surfaces, plugins, multi-agent, and web search by default;
 5. parses text, usage, and raw events, then removes package-owned temporary directories.
 
@@ -139,6 +148,12 @@ Useful options:
 | `cwd` | temporary directory | Workspace passed to Codex. Supplied directories are not deleted. |
 | `configHome` | temporary directory | Explicit Codex home. Supplied directories are not deleted. |
 | `signal` | - | Abort a running call with an `AbortSignal`. |
+| `images` | `[]` | Local files, HTTPS URLs, or base64 PNG/JPEG/GIF/WebP images. |
+
+Each image is limited to 10 MiB, all images together to 20 MiB, and each call to 20 images. HTTPS downloads reject credentials, private/reserved network destinations, unsafe redirects, oversized responses, and unsupported file signatures. Package-owned image files are removed after success, failure, timeout, or abort. The CLI exposes the same input through repeatable `--image <path|url|data-url>` flags.
+
+Codex CLI controls image fidelity in default mode; the SDK does not expose a separate `detail` setting for `codex exec`.
+Select a model that supports image input, such as `gpt-5.6-sol`; a text-only model produces an explicit package error instead of a misleading successful result.
 
 `--search` is CLI shorthand for `--web-search live`.
 
@@ -188,7 +203,7 @@ Direct-mode differences:
 - no temporary workspace, generated Codex config, repository instructions, or tool definitions;
 - upstream is always requested with `stream: true` and `store: false`; `runPrompt()` aggregates the SSE events locally;
 - `maxTokens` and `timeout` are not sent by this direct client; use an `AbortSignal` for a deadline;
-- only one text user message is constructed by the core package;
+- one user message containing the supplied text and image blocks is constructed by the core package;
 - no OAuth refresh, retries, rate limiting, or stability guarantee is provided.
 
 For recurring or production batch workloads, prefer the official OpenAI API or Batch API when available for the model and account.
@@ -235,6 +250,7 @@ The script exits before any network request if the confirmation variable is miss
 - **The response is cut short:** increase `maxTokens` above its intentionally small default of `64`. In direct mode this option is not forwarded upstream.
 - **A call hangs or must follow a client disconnect:** default mode has a five-minute timeout. Set `timeout` and/or pass an `AbortSignal`. Direct mode uses the signal but not the `timeout` option.
 - **Web search or agent behavior is missing:** those capabilities are disabled intentionally. Opt into web search explicitly. `ignoreUserConfig` enables broader raw Codex behavior and also bypasses the package's hardening.
+- **An image is rejected before Codex starts:** verify that it is PNG, JPEG, GIF, or WebP, within the documented size limits, and supplied as a local file, HTTPS URL, or valid base64 data URL. Private-network image URLs are intentionally blocked.
 
 ## Development
 

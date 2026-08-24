@@ -19,7 +19,7 @@ import {
   buildOpenAIResponse,
   streamOpenAIResponse
 } from "./openai-format.js";
-import { requestToPrompt } from "./prompt.js";
+import { requestToImageInputs, requestToPrompt } from "./prompt.js";
 import { createDefaultRunner } from "./runners/default.js";
 import { createCodexOauthRunner } from "./runners/codex-oauth.js";
 import { createMockRunner } from "./runners/mock.js";
@@ -43,7 +43,8 @@ export { logEvent, newRequestId } from "./log.js";
 export type { LogLevel, LogRecord } from "./log.js";
 export {
   serializeServerPrompt,
-  normalizeServerPromptInput
+  normalizeServerPromptInput,
+  requestToImageInputs
 } from "./prompt.js";
 export {
   createErrorBody,
@@ -73,6 +74,7 @@ export type {
   ConversationMessageInput,
   HttpError,
   MessageRole,
+  MessageImageBlock,
   MessageTextBlock,
   ResponsesInput,
   ResponsesRequestBody,
@@ -115,6 +117,9 @@ export function createServer(options: ServerOptions = {}) {
           ? JSON.stringify({ instructions: body.instructions, input: body.input })
           : requestToPrompt(body);
         const runOptions = requestToRunOptions(body, options, defaultModel);
+        if (!runner.directResponses) {
+          runOptions.images = requestToImageInputs(body.input);
+        }
         const runnerOptions = {
           ...runOptions,
           responsesBody: body
@@ -122,6 +127,7 @@ export function createServer(options: ServerOptions = {}) {
         runMeta.model = runOptions.model;
         runMeta.stream = !!body.stream;
         runMeta.prompt_chars = prompt.length;
+        runMeta.image_count = runOptions.images?.length || 0;
 
         if (body.stream) {
           const final = await streamOpenAIResponse(request, response, runner, prompt, runnerOptions);

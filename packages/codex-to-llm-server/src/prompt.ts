@@ -1,10 +1,18 @@
 import { createHttpError } from "./http-io.js";
 import {
+  normalizeImageInputs,
+  normalizeImageUrl,
+  parseImageDataUrl,
+  type ImageInput
+} from "@yadimon/codex-to-llm";
+import {
   SUPPORTED_ROLES,
   TEXT_BLOCK_TYPES,
   type ConversationMessageInput,
+  type MessageImageBlock,
   type MessageContentBlock,
   type MessageRole,
+  type ResponsesInput,
   type ResponsesRequestBody,
   type ServerPromptInput
 } from "./types.js";
@@ -14,6 +22,81 @@ export function requestToPrompt(body: ResponsesRequestBody): string {
     instructions: body.instructions,
     input: body.input
   });
+}
+
+export function requestToImageInputs(input: ResponsesInput | undefined): ImageInput[] {
+  const images: ImageInput[] = [];
+
+  function collectMessages(
+    entries: ConversationMessageInput[],
+    defaultRole?: MessageRole
+  ): void {
+    entries.forEach((entry, messageIndex) => {
+      if (!entry || typeof entry !== "object" || !Array.isArray(entry.content)) {
+        return;
+      }
+      const role = entry.role || defaultRole;
+      entry.content.forEach((block, blockIndex) => {
+        if (!block || typeof block !== "object" || block.type !== "input_image") {
+          return;
+        }
+        if (role !== "user") {
+          throw createHttpError(
+            400,
+            `input_image is only supported in user messages (message ${messageIndex}, block ${blockIndex})`
+          );
+        }
+        images.push(normalizeInputImageBlock(block, messageIndex, blockIndex));
+      });
+    });
+  }
+
+  if (Array.isArray(input)) {
+    collectMessages(input, "user");
+  } else if (input && typeof input === "object") {
+    if (Array.isArray(input.messages)) {
+      collectMessages(input.messages);
+    }
+    if (Array.isArray(input.input)) {
+      collectMessages(input.input, "user");
+    }
+  }
+
+  try {
+    normalizeImageInputs(images);
+  } catch (error) {
+    throw createHttpError(400, error instanceof Error ? error.message : String(error));
+  }
+  return images;
+}
+
+function normalizeInputImageBlock(
+  block: MessageImageBlock,
+  messageIndex: number,
+  blockIndex: number
+): ImageInput {
+  const label = `input_image at message ${messageIndex}, block ${blockIndex}`;
+  if (block.file_id != null) {
+    throw createHttpError(400, `${label} file_id is not supported`);
+  }
+  if (block.detail != null && !["auto", "low", "high"].includes(block.detail)) {
+    throw createHttpError(400, `${label} detail must be auto, low, or high`);
+  }
+  if (typeof block.image_url !== "string" || !block.image_url.trim()) {
+    throw createHttpError(400, `${label} image_url must be a non-empty string`);
+  }
+
+  try {
+    if (block.image_url.trim().toLowerCase().startsWith("data:")) {
+      return parseImageDataUrl(block.image_url, `${label} image_url`);
+    }
+    return {
+      type: "url",
+      url: normalizeImageUrl(block.image_url, `${label} image_url`)
+    };
+  } catch (error) {
+    throw createHttpError(400, error instanceof Error ? error.message : String(error));
+  }
 }
 
 export function serializeServerPrompt(input: ServerPromptInput): string {
@@ -121,14 +204,14 @@ function normalizeMessageContent(content: string | MessageContentBlock[], label:
       throw createHttpError(400, `${label} block ${index} must be an object`);
     }
     if (block.type === "input_image") {
-      throw createHttpError(400, `${label} image blocks require the codex-oauth backend`);
+      return "";
     }
     if (!TEXT_BLOCK_TYPES.has(block.type) || typeof block.text !== "string") {
       throw createHttpError(400, `${label} block ${index} must be a supported text block`);
     }
     return normalizeText(block.text, `${label} block ${index}`);
   });
-  return blocks.join("\n\n");
+  return blocks.filter(Boolean).join("\n\n");
 }
 
 function normalizeText(value: string, label: string): string {

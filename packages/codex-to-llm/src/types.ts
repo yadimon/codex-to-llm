@@ -6,6 +6,24 @@ export const DEFAULT_WEB_SEARCH = "disabled";
 
 export type WebSearchMode = "disabled" | "cached" | "live";
 
+export type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+
+export type ImageInput =
+  | {
+      type: "base64";
+      mediaType: ImageMediaType;
+      data: string;
+    }
+  | {
+      type: "url";
+      url: string;
+    }
+  | {
+      type: "file";
+      path: string;
+      mediaType?: ImageMediaType;
+    };
+
 export interface RunOptions {
   model?: string;
   reasoningEffort?: string;
@@ -24,6 +42,7 @@ export interface RunOptions {
   confirmDirectApiRisk?: boolean;
   directApiEndpoint?: string;
   directApiInstructions?: string;
+  images?: ImageInput[];
   signal?: AbortSignal;
   envPassthrough?: string[];
 }
@@ -83,4 +102,5 @@ export interface Runner {
 export interface SpawnResolution {
   command: string;
   args: string[];
+  windowsVerbatimArguments?: boolean;
 }

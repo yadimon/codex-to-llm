@@ -69,7 +69,7 @@ The server does **not** implement `/v1/chat/completions`. A Chat Completions-onl
 
 Both packages default to `codex exec`. Each call gets an isolated temporary Codex home and workspace, ephemeral history, disabled tools, disabled web search, and in-memory runtime SQLite state.
 
-An experimental `codex-oauth` direct mode can skip the Codex subprocess and call the ChatGPT/Codex Responses backend with the token in `auth.json`. That mode is explicit opt-in, requires risk confirmation, and must remain a trusted local integration. See the package READMEs before using it.
+The recommended `codex-exec` backend supports text and image input through the installed Codex CLI. An experimental `codex-oauth` direct mode can skip the Codex subprocess and call the ChatGPT/Codex Responses backend with the token in `auth.json`. That mode is explicit opt-in, requires risk confirmation, and must remain a trusted local integration. See the package READMEs before using it.
 
 ## Workspace development
 

@@ -27,6 +27,7 @@ export type MessageImageDetail = "low" | "high" | "auto";
 export type MessageImageBlock = {
   type: "input_image";
   image_url: string;
+  file_id?: unknown;
   detail?: MessageImageDetail;
 };
 export const IMAGE_DETAIL_VALUES = new Set<MessageImageDetail>(["low", "high", "auto"]);

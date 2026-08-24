@@ -108,6 +108,39 @@ test("direct API call mode bypasses codex exec when explicitly confirmed", async
   }
 });
 
+test("direct API call mode maps SDK images to Responses content blocks", async () => {
+  const authPath = writeTempAuth({ access_token: "test-access-token" });
+  const upstream = await startFakeCodexUpstream();
+  const imageData =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC";
+
+  try {
+    await runPrompt("Describe both images", {
+      directApiCall: true,
+      confirmDirectApiRisk: true,
+      directApiEndpoint: upstream.url,
+      directApiInstructions: "Describe visible content only.",
+      authPath,
+      images: [
+        { type: "base64", mediaType: "image/png", data: imageData },
+        { type: "url", url: "https://example.com/image.webp" }
+      ]
+    });
+
+    const input = upstream.requests[0].body.input as Array<{
+      content: Array<Record<string, unknown>>;
+    }>;
+    assert.deepEqual(input[0].content, [
+      { type: "input_image", image_url: `data:image/png;base64,${imageData}` },
+      { type: "input_image", image_url: "https://example.com/image.webp" },
+      { type: "input_text", text: "Describe both images" }
+    ]);
+  } finally {
+    await upstream.close();
+    fs.rmSync(path.dirname(authPath), { recursive: true, force: true });
+  }
+});
+
 test("direct API call mode requires user-supplied instructions", async () => {
   await assert.rejects(
     runPrompt("Hello", {

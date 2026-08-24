@@ -8,6 +8,16 @@ export function createCliArgReader(args: string[]) {
 
       return fallback;
     },
+    getArgs(name: string): string[] {
+      const values: string[] = [];
+      for (let index = 0; index < args.length; index += 1) {
+        if (args[index] === name && args[index + 1]) {
+          values.push(args[index + 1]);
+          index += 1;
+        }
+      }
+      return values;
+    },
     hasFlag(name: string): boolean {
       return args.includes(name);
     }

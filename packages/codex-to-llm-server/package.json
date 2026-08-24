@@ -1,7 +1,7 @@
 {
   "name": "@yadimon/codex-to-llm-server",
   "version": "1.0.7",
-  "description": "Expose local Codex authentication through a Responses-compatible HTTP server",
+  "description": "Expose local Codex text and image input through a Responses-compatible HTTP server",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -41,6 +41,7 @@
     "publish:dry-run": "npm publish --dry-run",
     "release:check": "tsx ./scripts/release-check.ts",
     "smoke": "tsx ./scripts/smoke-server.ts",
+    "smoke:vision": "tsx ./scripts/smoke-vision.ts",
     "start": "tsx ./src/cli.ts",
     "start:mock": "tsx ./scripts/start-mock-server.ts",
     "test:docker": "tsx ./scripts/docker-e2e.ts",

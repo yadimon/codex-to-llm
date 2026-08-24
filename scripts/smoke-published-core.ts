@@ -6,8 +6,15 @@ import { pathToFileURL } from "node:url";
 
 const PACKAGE_NAME = "@yadimon/codex-to-llm";
 const VERSION_SPEC = process.env.SMOKE_PUBLISHED_VERSION || "latest";
-const PROMPT = process.env.SMOKE_PUBLISHED_PROMPT || "Reply with the single word OK and nothing else.";
-const MODEL = process.env.SMOKE_PUBLISHED_MODEL || "gpt-5.3-codex-spark";
+const VISION = process.env.SMOKE_PUBLISHED_VISION === "1" || process.argv.includes("--vision");
+const BLUE_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const PROMPT = process.env.SMOKE_PUBLISHED_PROMPT || (
+  VISION
+    ? "What is the dominant color of this image? Reply with one lowercase word."
+    : "Reply with the single word OK and nothing else."
+);
+const MODEL = process.env.SMOKE_PUBLISHED_MODEL || (VISION ? "gpt-5.6-sol" : "gpt-5.3-codex-spark");
 const TIMEOUT_MS = Number(process.env.SMOKE_PUBLISHED_TIMEOUT_MS || 120_000);
 
 function runNpm(args: string[], cwd: string): string {
@@ -68,16 +75,23 @@ async function main(): Promise<void> {
 
     console.log(`[smoke] runPrompt model=${MODEL} timeout=${TIMEOUT_MS}ms`);
     const start = Date.now();
-    const result = await entry.runPrompt(PROMPT, {
+    const options: Record<string, unknown> = {
       model: MODEL,
       reasoningEffort: "low",
       maxTokens: 32,
       timeout: TIMEOUT_MS
-    });
+    };
+    if (VISION) {
+      options.images = [{ type: "base64", data: BLUE_PNG_BASE64, mediaType: "image/png" }];
+    }
+    const result = await entry.runPrompt(PROMPT, options);
     const elapsed = Date.now() - start;
 
     if (!result.content || !result.content.trim()) {
       throw new Error("Empty response from runPrompt");
+    }
+    if (VISION && !/\bblue\b/i.test(result.content)) {
+      throw new Error(`Expected a blue image response, received: ${JSON.stringify(result.content)}`);
     }
 
     console.log(`[smoke] OK in ${elapsed}ms`);

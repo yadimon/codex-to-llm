@@ -22,6 +22,7 @@ import { buildCodexArgs } from "./codex-args.js";
 import { normalizeRunOptions } from "./options.js";
 import { appendBounded, buildAbortError, createCodexExitError } from "./exit.js";
 import { runPromptDirectApi, streamPromptDirectApi } from "./direct-api.js";
+import { prepareImageFiles, type PreparedImageFiles } from "./images.js";
 import type {
   CoreResponse,
   ResponseShell,
@@ -68,10 +69,64 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
     return streamPromptDirectApi(prompt, options);
   }
 
+  return streamPromptWithImages(prompt, options);
+}
+
+async function* streamPromptWithImages(
+  prompt: string,
+  options: RunOptions
+): AsyncIterable<StreamEvent> {
   if (typeof prompt !== "string") {
     throw new Error("Prompt must be a string");
   }
-  if (!prompt.trim()) {
+  if (!prompt.trim() && (!Array.isArray(options.images) || options.images.length === 0)) {
+    throw new Error("Prompt must not be empty");
+  }
+
+  const ownsWorkspace = !options.cwd;
+  let workspace: string | undefined;
+  let preparedImages: PreparedImageFiles;
+
+  try {
+    workspace = createWorkspace(options.cwd);
+    preparedImages = await prepareImageFiles(options.images, {
+      baseDir: options.cwd || process.cwd(),
+      tempBaseDir: workspace,
+      signal: options.signal
+    });
+  } catch (error) {
+    cleanupDirectory(workspace, ownsWorkspace);
+    throw error;
+  }
+
+  try {
+    for await (const event of streamPromptProcess(
+      prompt,
+      options,
+      preparedImages.paths,
+      workspace,
+      ownsWorkspace
+    )) {
+      yield event;
+    }
+  } finally {
+    preparedImages.cleanup();
+    cleanupDirectory(workspace, ownsWorkspace);
+  }
+}
+
+function streamPromptProcess(
+  prompt: string,
+  options: RunOptions,
+  imagePaths: string[],
+  workspace: string,
+  ownsWorkspace: boolean
+): AsyncIterable<StreamEvent> {
+
+  if (typeof prompt !== "string") {
+    throw new Error("Prompt must be a string");
+  }
+  if (!prompt.trim() && imagePaths.length === 0) {
     throw new Error("Prompt must not be empty");
   }
 
@@ -79,13 +134,10 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
   const { model, timeoutMs, cliPath } = normalizedOptions;
   assertCliPathExists(cliPath);
 
-  const ownsWorkspace = !options.cwd;
   const ownsCodexHome = !options.configHome;
-  let workspace: string | undefined;
   let codexHome: string | undefined;
 
   try {
-    workspace = createWorkspace(options.cwd);
     codexHome = createCodexHome({
       authPath: options.authPath,
       configHome: options.configHome
@@ -108,7 +160,7 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
   let lastErrorMessage = "";
   let usage: UsageSummary = createEmptyUsage();
 
-  const cliArgs = buildCodexArgs(normalizedOptions, workspace);
+  const cliArgs = buildCodexArgs(normalizedOptions, workspace, imagePaths);
 
   queue.push({
     type: "response.started",
@@ -119,7 +171,8 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
   const child: ChildProcessWithoutNullStreams = spawn(spawnConfig.command, spawnConfig.args, {
     cwd: workspace,
     env: buildChildEnv({ codexHome, envPassthrough: options.envPassthrough }),
-    windowsHide: true
+    windowsHide: true,
+    windowsVerbatimArguments: spawnConfig.windowsVerbatimArguments
   });
   const timeoutHandle = setTimeout(() => {
     if (!settled) {
@@ -263,6 +316,13 @@ export function streamPrompt(prompt: string, options: RunOptions = {}): AsyncIte
       const exitError = createCodexExitError(code, signalCode, stderr, lastErrorMessage);
       if (exitError) {
         finalizeFailure(exitError);
+        return;
+      }
+      if (
+        imagePaths.length > 0 &&
+        /view_image is not allowed because you do not support image inputs/i.test(stderr)
+      ) {
+        finalizeFailure(new Error(`Model ${model} does not support image input in Codex CLI`));
         return;
       }
       finalizeSuccess();

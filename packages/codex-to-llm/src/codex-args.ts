@@ -1,6 +1,10 @@
 import type { NormalizedRunOptions } from "./types.js";
 
-export function buildCodexArgs(options: NormalizedRunOptions, workspace: string): string[] {
+export function buildCodexArgs(
+  options: NormalizedRunOptions,
+  workspace: string,
+  imagePaths: string[] = []
+): string[] {
   const {
     model,
     reasoningEffort,
@@ -34,6 +38,7 @@ export function buildCodexArgs(options: NormalizedRunOptions, workspace: string)
     "remote_models",
     "--disable",
     "plugins",
+    ...imagePaths.flatMap(imagePath => ["--image", imagePath]),
     "--model",
     model,
     "-c",

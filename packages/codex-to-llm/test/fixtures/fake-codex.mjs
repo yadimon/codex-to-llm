@@ -53,13 +53,24 @@ process.stdin.on("end", () => {
 });
 
 function emitResponse(rawStdin) {
+  if (process.env.FAKE_CODEX_STDERR) {
+    process.stderr.write(process.env.FAKE_CODEX_STDERR);
+  }
   if (process.env.FAKE_CODEX_CAPTURE_FILE) {
+    const imagePaths = args.flatMap((arg, index) =>
+      arg === "--image" && args[index + 1] ? [args[index + 1]] : []
+    );
     fs.writeFileSync(
       process.env.FAKE_CODEX_CAPTURE_FILE,
       JSON.stringify(
         {
           args,
-          codexHome: process.env.CODEX_HOME || null
+          codexHome: process.env.CODEX_HOME || null,
+          images: imagePaths.map(imagePath => ({
+            path: imagePath,
+            exists: fs.existsSync(imagePath),
+            data: fs.existsSync(imagePath) ? fs.readFileSync(imagePath).toString("base64") : null
+          }))
         },
         null,
         2

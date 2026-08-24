@@ -6,8 +6,15 @@ import { pathToFileURL } from "node:url";
 
 const PACKAGE_NAME = "@yadimon/codex-to-llm-server";
 const VERSION_SPEC = process.env.SMOKE_PUBLISHED_VERSION || "latest";
-const PROMPT = process.env.SMOKE_PUBLISHED_PROMPT || "Reply with the single word OK and nothing else.";
-const MODEL = process.env.SMOKE_PUBLISHED_MODEL || "gpt-5.3-codex-spark";
+const VISION = process.env.SMOKE_PUBLISHED_VISION === "1" || process.argv.includes("--vision");
+const BLUE_PNG_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const PROMPT = process.env.SMOKE_PUBLISHED_PROMPT || (
+  VISION
+    ? "What is the dominant color of this image? Reply with one lowercase word."
+    : "Reply with the single word OK and nothing else."
+);
+const MODEL = process.env.SMOKE_PUBLISHED_MODEL || (VISION ? "gpt-5.6-sol" : "gpt-5.3-codex-spark");
 
 interface StartedServer {
   url: string;
@@ -103,7 +110,18 @@ async function main(): Promise<void> {
     const response = await fetch(`${started.url}/v1/responses`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: MODEL, input: PROMPT })
+      body: JSON.stringify({
+        model: MODEL,
+        input: VISION
+          ? [{
+            role: "user",
+            content: [
+              { type: "input_text", text: PROMPT },
+              { type: "input_image", image_url: BLUE_PNG_DATA_URL }
+            ]
+          }]
+          : PROMPT
+      })
     });
     if (response.status !== 200) {
       throw new Error(`/v1/responses status ${response.status}: ${await response.text()}`);
@@ -116,6 +134,11 @@ async function main(): Promise<void> {
 
     if (!responseJson.output_text || !responseJson.output_text.trim()) {
       throw new Error("Empty output_text from server");
+    }
+    if (VISION && !/\bblue\b/i.test(responseJson.output_text)) {
+      throw new Error(
+        `Expected a blue image response, received: ${JSON.stringify(responseJson.output_text)}`
+      );
     }
 
     console.log(`[smoke] OK in ${elapsed}ms`);

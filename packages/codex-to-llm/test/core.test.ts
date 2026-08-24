@@ -352,3 +352,89 @@ test("runPrompt forwards web search and ignore flags to codex exec", async () =>
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test("runPrompt materializes image input for codex exec and cleans it afterward", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-image-forward-"));
+  const authPath = path.join(tempDir, "auth.json");
+  const capturePath = path.join(tempDir, "capture.json");
+  const fixturePath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "./fixtures/fake-codex.mjs"
+  );
+  const cliPath = process.platform === "win32"
+    ? path.join(tempDir, "fake-codex.cmd")
+    : fixturePath;
+  const imageData =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC";
+
+  fs.writeFileSync(authPath, JSON.stringify({ access_token: "test-token" }), "utf8");
+  if (process.platform === "win32") {
+    fs.writeFileSync(cliPath, `@echo off\r\n"${process.execPath}" "${fixturePath}" %*\r\n`, "utf8");
+  }
+
+  const previousCapturePath = process.env.FAKE_CODEX_CAPTURE_FILE;
+  process.env.FAKE_CODEX_CAPTURE_FILE = capturePath;
+
+  try {
+    const response = await runPrompt("Identify the color", {
+      authPath,
+      cliPath,
+      timeout: 5000,
+      images: [{ type: "base64", mediaType: "image/png", data: imageData }],
+      envPassthrough: ["FAKE_CODEX_CAPTURE_FILE"]
+    });
+    const capture = JSON.parse(fs.readFileSync(capturePath, "utf8")) as {
+      args: string[];
+      images: Array<{ path: string; exists: boolean; data: string }>;
+    };
+
+    assert.equal(response.content, "FAKE:Identify the color");
+    assert.equal(capture.images.length, 1);
+    assert.equal(capture.images[0].exists, true);
+    assert.equal(capture.images[0].data, imageData);
+    assert.equal(fs.existsSync(capture.images[0].path), false);
+    assert.ok(capture.args.includes("--image"));
+  } finally {
+    if (previousCapturePath == null) delete process.env.FAKE_CODEX_CAPTURE_FILE;
+    else process.env.FAKE_CODEX_CAPTURE_FILE = previousCapturePath;
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("runPrompt fails clearly when Codex reports a model without image support", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-image-model-"));
+  const authPath = path.join(tempDir, "auth.json");
+  const fixturePath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "./fixtures/fake-codex.mjs"
+  );
+  const cliPath = process.platform === "win32"
+    ? path.join(tempDir, "fake-codex.cmd")
+    : fixturePath;
+  const imageData =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC";
+
+  fs.writeFileSync(authPath, JSON.stringify({ access_token: "test-token" }), "utf8");
+  if (process.platform === "win32") {
+    fs.writeFileSync(cliPath, `@echo off\r\n"${process.execPath}" "${fixturePath}" %*\r\n`, "utf8");
+  }
+  const previousStderr = process.env.FAKE_CODEX_STDERR;
+  process.env.FAKE_CODEX_STDERR =
+    "view_image is not allowed because you do not support image inputs";
+
+  try {
+    await assert.rejects(
+      runPrompt("Describe", {
+        authPath,
+        cliPath,
+        images: [{ type: "base64", mediaType: "image/png", data: imageData }],
+        envPassthrough: ["FAKE_CODEX_STDERR"]
+      }),
+      /does not support image input/
+    );
+  } finally {
+    if (previousStderr == null) delete process.env.FAKE_CODEX_STDERR;
+    else process.env.FAKE_CODEX_STDERR = previousStderr;
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

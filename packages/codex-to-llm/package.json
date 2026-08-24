@@ -1,7 +1,7 @@
 {
   "name": "@yadimon/codex-to-llm",
   "version": "1.0.7",
-  "description": "Run stateless Codex prompts from Node.js or the CLI using local Codex authentication",
+  "description": "Run stateless Codex text and image prompts using local Codex authentication",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -43,6 +43,7 @@
     "smoke:cli": "tsx ./src/cli.ts --prompt \"Hi\" --json --model gpt-5.3-codex-spark",
     "smoke:direct-api": "tsx ./scripts/smoke-direct-api.ts",
     "smoke:sdk": "tsx ./scripts/smoke-sdk.ts",
+    "smoke:vision": "tsx ./scripts/smoke-vision.ts",
     "prepack": "npm run test && npm run build",
     "test": "tsx ./scripts/run-node-tests.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"

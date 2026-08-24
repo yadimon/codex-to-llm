@@ -92,9 +92,9 @@ With the default backend, a delta represents a Codex `agent_message`, not necess
 | | `codex-exec` (default) | `codex-oauth` (experimental) |
 |---|---|---|
 | Calls | installed `codex exec` process | ChatGPT/Codex Responses backend directly |
-| Best for | conservative local text automation | trusted local calls that need lower process overhead or image input |
+| Best for | conservative local text and image automation | trusted local calls that need lower process overhead or exact Responses-shaped input |
 | Input handling | flattens dialog into a text prompt | preserves Responses-shaped messages and content blocks |
-| Images | rejected | HTTPS and base64 data-image URLs supported inside message content |
+| Images | HTTPS and base64 data-image URLs, materialized for `codex exec --image` | HTTPS and base64 data-image URLs forwarded as Responses content |
 | `instructions` | optional | required |
 | `max_output_tokens` | forwarded to core | validated locally, then omitted upstream |
 | Risk confirmation | not required | `CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK=1` required |
@@ -139,7 +139,7 @@ The backend uses the OAuth access token in Codex `auth.json`; it is not the publ
 
 Do not expose subscription-backed direct mode as a public proxy. Keep it on loopback, or use your own API key and network controls for a private container network. See OpenAI's [Services Agreement](https://openai.com/policies/services-agreement/) and [API authentication guidance](https://platform.openai.com/docs/api-reference/authentication).
 
-### Image input in direct mode
+### Image input
 
 Images must be nested in a message content array. Top-level `input_image` is not supported.
 
@@ -163,7 +163,11 @@ Images must be nested in a message content array. Top-level `input_image` is not
 }
 ```
 
-Supported image URLs are `https://...` and base64 `data:image/png|jpeg|gif|webp` URLs. `file_id`, HTTP URLs, and images in `codex-exec` mode return `400` instead of being silently dropped.
+Supported image URLs are `https://...` and base64 `data:image/png|jpeg|gif|webp` URLs. `file_id` and HTTP URLs return `400` instead of being silently dropped.
+
+The default `codex-exec` backend validates each image, downloads HTTPS inputs with private-network and redirect protections, writes package-owned temporary files, passes them through Codex CLI `--image`, and removes the files after the call. Its limits are 20 images, 10 MiB per image, and 20 MiB total. The optional `detail` field is validated for wire compatibility but Codex CLI chooses image fidelity; use `codex-oauth` only when exact Responses-shaped image blocks and `detail` forwarding are required.
+
+Choose a model with image input support, for example `gpt-5.6-sol`. The default text-oriented model may not accept images.
 
 ## API compatibility
 
@@ -196,7 +200,7 @@ There is no `/v1/chat/completions`, embeddings, files, batches, tool execution, 
 
 ## Dialog semantics and trust boundary
 
-In `codex-exec` mode, the server flattens messages into one text prompt with `### system`, `### developer`, `### user`, and `### assistant` headers. It also adds a short stateless-adapter prelude. User content is not escaped, so untrusted text that mimics those headers remains visible to the model. Validate or delimit adversarial input in the caller.
+In `codex-exec` mode, the server flattens message text into one prompt with `### system`, `### developer`, `### user`, and `### assistant` headers, while user image blocks are attached in encounter order through `codex exec --image`. It also adds a short stateless-adapter prelude. User content is not escaped, so untrusted text that mimics those headers remains visible to the model. Validate or delimit adversarial input in the caller.
 
 In `codex-oauth` mode, message roles and text/image content blocks are forwarded in Responses shape, with `stream: true` and `store: false` forced upstream. No adapter prelude is added.
 
@@ -316,7 +320,7 @@ For Docker Desktop on Windows, a named volume plus an explicit credential-copy s
 - **`401` from the local server:** `CODEX_TO_LLM_SERVER_API_KEY` is set and the request is missing the matching bearer token.
 - **`Unsupported model`:** check `GET /v1/models`, then update `CODEX_TO_LLM_SERVER_MODELS` and ensure the default model is included.
 - **`instructions are required in codex-oauth direct mode`:** add a non-empty top-level `instructions` string to the Responses request.
-- **An image request returns `400`:** use the `codex-oauth` backend and place `input_image` inside a message content array. Only HTTPS and supported base64 data-image URLs are accepted.
+- **An image request fails:** place `input_image` inside a user message content array. Only HTTPS and supported base64 data-image URLs are accepted; the default backend also blocks private-network destinations and enforces image size/count limits.
 - **`Codex direct upstream failed with HTTP 401` or `403`:** refresh the Codex login on the host and retry. This package does not refresh OAuth tokens.
 - **A Chat Completions client gets `404`:** the package exposes `/v1/responses`, not `/v1/chat/completions`. Configure the client for Responses or place a deliberate translator in front of the server.
 - **Health is green but generation fails:** `/healthz` checks only the HTTP process. Make a small authenticated `/v1/responses` request to verify credentials, model access, and the selected backend end to end.
