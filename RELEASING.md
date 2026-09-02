@@ -75,6 +75,22 @@ These scripts:
 
 GitHub Actions publishes only the package that matches the pushed tag.
 
+## Pre-release verification
+
+The release scripts run `npm run check` themselves; `npm run release:check` adds the Docker e2e. Neither covers the live lanes, which need real Codex auth. Run them explicitly before tagging a release that touches the runner, spawn, or image handling:
+
+- `npm run smoke:vision` — image input through core and server against the real CLI.
+- `CODEX_TO_LLM_CONFIRM_DIRECT_API_RISK=1 npm run smoke:direct-api` — direct Responses endpoint.
+
+`npm test` also asserts that the shebang fixtures under `packages/*/test/fixtures/` stay tracked as executable (`100755`); Linux CI runs them directly, and a lost mode bit only shows up there.
+
+## Post-publish verification
+
+A green `Publish` run proves the tarball was accepted, not that the published artifact works. After the workflow finishes:
+
+- `npm run smoke:published` — clean-installs the published core, server, and npx paths from the registry and exercises them.
+- `npm run smoke:published-vision` — the same for image input.
+
 ## Manual Equivalent
 
 Core package:

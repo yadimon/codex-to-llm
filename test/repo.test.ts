@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
 const repoRoot = process.cwd();
+const executableFixtures = ["packages/codex-to-llm/test/fixtures/fake-codex.mjs"];
 const rootPackageJson = JSON.parse(
   fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")
 ) as {
@@ -122,4 +124,20 @@ test("health-check artifacts exist and document the mandatory health commands", 
   assert.match(healthCheck, /`npm run test:docker`/);
   assert.match(healthCheck, /HC-EXT-001/);
   assert.match(healthCheck, /HC-EXT-002/);
+});
+
+test("shebang fixtures stay tracked as executable so Linux CI can run them directly", () => {
+  for (const fixture of executableFixtures) {
+    const firstLine = fs.readFileSync(path.join(repoRoot, fixture), "utf8").split("\n")[0];
+    assert.equal(firstLine, "#!/usr/bin/env node", `${fixture} must start with a node shebang`);
+    const indexEntry = execFileSync("git", ["ls-files", "--stage", "--", fixture], {
+      cwd: repoRoot,
+      encoding: "utf8"
+    }).trim();
+    assert.match(
+      indexEntry,
+      /^100755 /,
+      `${fixture} must be tracked with mode 100755, got: ${indexEntry || "<untracked>"}`
+    );
+  }
 });
