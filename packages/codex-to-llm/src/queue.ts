@@ -6,6 +6,8 @@ export class AsyncQueue<T> implements AsyncIterableIterator<T> {
   }> = [];
   private closed = false;
   private failure: unknown = null;
+  private returned = false;
+  private disposal: Promise<void> | undefined;
   private onDispose: (() => void | Promise<void>) | undefined;
 
   /**
@@ -54,17 +56,36 @@ export class AsyncQueue<T> implements AsyncIterableIterator<T> {
   }
 
   async return(): Promise<IteratorResult<T>> {
-    const dispose = this.onDispose;
-    this.onDispose = undefined;
     // The consumer has abandoned iteration: buffered events are no longer
     // wanted, and holding them would keep delivering after `return()`.
+    this.returned = true;
     this.items = [];
-    this.close();
-    await dispose?.();
+
+    if (!this.disposal) {
+      const dispose = this.onDispose;
+      this.onDispose = undefined;
+      this.close();
+      // One shared promise, so a second `return()` waits for the same
+      // disposal instead of reporting completion while cleanup is still
+      // running.
+      this.disposal = Promise.resolve(dispose?.()).then(() => undefined);
+    }
+
+    await this.disposal;
     return { value: undefined as T, done: true };
   }
 
   next(): Promise<IteratorResult<T>> {
+    // Once the consumer has returned, the iterator is finished. The disposer
+    // reports the abandonment through `fail()`, but that must not turn a
+    // completed iterator into a rejecting one.
+    if (this.returned) {
+      return Promise.resolve({
+        value: undefined as T,
+        done: true
+      });
+    }
+
     if (this.items.length > 0) {
       return Promise.resolve({
         value: this.items.shift() as T,

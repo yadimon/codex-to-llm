@@ -174,9 +174,13 @@ function streamPromptProcess(
     response: createResponseShell({ responseId, model, prompt, startedAt })
   });
 
-  const spawnConfig = resolveSpawn(cliPath, cliArgs);
   let child: ChildProcessWithoutNullStreams;
   try {
+    // resolveSpawn throws for arguments the Windows cmd shim cannot carry, and
+    // spawn can throw synchronously (EFTYPE/EINVAL/E2BIG) — child.on("error")
+    // never fires for those. Both happen after the directories exist, so both
+    // belong inside the cleanup boundary.
+    const spawnConfig = resolveSpawn(cliPath, cliArgs);
     child = spawn(spawnConfig.command, spawnConfig.args, {
       cwd: workspace,
       env: buildChildEnv({ codexHome, envPassthrough: options.envPassthrough }),
@@ -184,8 +188,6 @@ function streamPromptProcess(
       windowsVerbatimArguments: spawnConfig.windowsVerbatimArguments
     });
   } catch (error) {
-    // spawn can throw synchronously (EFTYPE/EINVAL/E2BIG); `child.on("error")`
-    // never fires for those, so cleanup has to happen here.
     throw withCleanupPreserved(error, [
       () => cleanupDirectory(workspace, ownsWorkspace),
       () => cleanupDirectory(codexHome, ownsCodexHome)
@@ -252,8 +254,13 @@ function streamPromptProcess(
         error.message = `${error.message} (termination failed: ${reason})`;
       })
       .finally(() => {
-        cleanupDirectory(workspace, ownsWorkspace);
-        cleanupDirectory(codexHome, ownsCodexHome);
+        // cleanupDirectory rethrows non-ignorable errors; routing them through
+        // withCleanupPreserved keeps the original failure and guarantees
+        // queue.fail still runs, so a consumer awaiting next() cannot hang.
+        withCleanupPreserved(error, [
+          () => cleanupDirectory(workspace, ownsWorkspace),
+          () => cleanupDirectory(codexHome, ownsCodexHome)
+        ]);
         queue.fail(error);
       })
       .then(() => undefined);

@@ -71,3 +71,42 @@ test("AsyncQueue reports completion after a consumer returns early", async () =>
 
   assert.deepEqual(await queue.next(), { value: undefined, done: true });
 });
+
+test("AsyncQueue shares one disposal across concurrent return calls", async () => {
+  const order: string[] = [];
+  let releaseDispose: (() => void) | undefined;
+  const disposeStarted = new Promise<void>(resolve => {
+    releaseDispose = resolve;
+  });
+
+  const queue = new AsyncQueue<string>(async () => {
+    order.push("dispose-start");
+    await new Promise(resolve => setTimeout(resolve, 20));
+    order.push("dispose-end");
+    releaseDispose?.();
+  });
+
+  const first = queue.return();
+  const second = queue.return();
+  await Promise.all([first, second, disposeStarted]);
+  order.push("both-returned");
+
+  assert.deepEqual(order, ["dispose-start", "dispose-end", "both-returned"]);
+});
+
+test("AsyncQueue stays completed when the disposer reports a failure", async () => {
+  const queue: AsyncQueue<string> = new AsyncQueue<string>(() => {
+    // Mirrors the runner: the disposer reports abandonment through fail().
+    queue.fail(new Error("Stream closed by consumer"));
+  });
+  queue.push("first");
+
+  const seen: string[] = [];
+  for await (const item of queue) {
+    seen.push(item);
+    break;
+  }
+
+  assert.deepEqual(seen, ["first"]);
+  assert.deepEqual(await queue.next(), { value: undefined, done: true });
+});
