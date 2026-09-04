@@ -6,6 +6,17 @@ export class AsyncQueue<T> implements AsyncIterableIterator<T> {
   }> = [];
   private closed = false;
   private failure: unknown = null;
+  private onDispose: (() => void | Promise<void>) | undefined;
+
+  /**
+   * `onDispose` runs when a consumer abandons iteration (an early `break`,
+   * `return`, or a throw inside a `for await` body). Without it the producer
+   * keeps running after the consumer has walked away — leaking the child
+   * process, its timeout, and the ephemeral directories holding auth material.
+   */
+  constructor(onDispose?: () => void | Promise<void>) {
+    this.onDispose = onDispose;
+  }
 
   push(item: T): void {
     if (this.closed) {
@@ -40,6 +51,17 @@ export class AsyncQueue<T> implements AsyncIterableIterator<T> {
 
   [Symbol.asyncIterator](): AsyncIterableIterator<T> {
     return this;
+  }
+
+  async return(): Promise<IteratorResult<T>> {
+    const dispose = this.onDispose;
+    this.onDispose = undefined;
+    // The consumer has abandoned iteration: buffered events are no longer
+    // wanted, and holding them would keep delivering after `return()`.
+    this.items = [];
+    this.close();
+    await dispose?.();
+    return { value: undefined as T, done: true };
   }
 
   next(): Promise<IteratorResult<T>> {

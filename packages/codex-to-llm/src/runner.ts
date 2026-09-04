@@ -151,7 +151,14 @@ function streamPromptProcess(
 
   const responseId = options.responseId || `resp_${randomUUID().replace(/-/g, "")}`;
   const startedAt = Date.now();
-  const queue = new AsyncQueue<StreamEvent>();
+  // Abandoning the stream (an early `break`) must tear the run down the same
+  // way a timeout or abort does; otherwise the child, its timeout, and the
+  // ephemeral home holding a copy of auth.json all outlive the consumer.
+  let cleanupSettled: Promise<void> = Promise.resolve();
+  const queue = new AsyncQueue<StreamEvent>(() => {
+    finalizeFailure(new Error("Stream closed by consumer"));
+    return cleanupSettled;
+  });
   const rawEvents: unknown[] = [];
   let settled = false;
   let content = "";
@@ -168,12 +175,22 @@ function streamPromptProcess(
   });
 
   const spawnConfig = resolveSpawn(cliPath, cliArgs);
-  const child: ChildProcessWithoutNullStreams = spawn(spawnConfig.command, spawnConfig.args, {
-    cwd: workspace,
-    env: buildChildEnv({ codexHome, envPassthrough: options.envPassthrough }),
-    windowsHide: true,
-    windowsVerbatimArguments: spawnConfig.windowsVerbatimArguments
-  });
+  let child: ChildProcessWithoutNullStreams;
+  try {
+    child = spawn(spawnConfig.command, spawnConfig.args, {
+      cwd: workspace,
+      env: buildChildEnv({ codexHome, envPassthrough: options.envPassthrough }),
+      windowsHide: true,
+      windowsVerbatimArguments: spawnConfig.windowsVerbatimArguments
+    });
+  } catch (error) {
+    // spawn can throw synchronously (EFTYPE/EINVAL/E2BIG); `child.on("error")`
+    // never fires for those, so cleanup has to happen here.
+    throw withCleanupPreserved(error, [
+      () => cleanupDirectory(workspace, ownsWorkspace),
+      () => cleanupDirectory(codexHome, ownsCodexHome)
+    ]);
+  }
   const timeoutHandle = setTimeout(() => {
     if (!settled) {
       finalizeFailure(new Error(`Codex execution timeout after ${timeoutMs}ms`));
@@ -227,7 +244,7 @@ function streamPromptProcess(
 
     queue.push({ type: "response.failed", error: { message: error.message } });
 
-    void terminate(child)
+    cleanupSettled = terminate(child)
       .catch(terminationError => {
         const reason = terminationError instanceof Error
           ? terminationError.message
@@ -238,7 +255,8 @@ function streamPromptProcess(
         cleanupDirectory(workspace, ownsWorkspace);
         cleanupDirectory(codexHome, ownsCodexHome);
         queue.fail(error);
-      });
+      })
+      .then(() => undefined);
   }
 
   function flushStdoutBuffer(): void {

@@ -7,9 +7,64 @@ import { fileURLToPath } from "node:url";
 import {
   createCodexExitError,
   runPrompt,
+  streamPrompt,
   normalizeRunOptions,
   normalizeSpawnError
 } from "../src/index.js";
+
+const WIN32_CLI_PATH: Record<string, (cmdPath: string, fixturePath: string) => string> = {
+  win32: cmdPath => cmdPath
+};
+
+function resolveFixtureCliPath(cmdPath: string, fixturePath: string): string {
+  const select = WIN32_CLI_PATH[process.platform] ?? ((_cmd: string, fixture: string) => fixture);
+  return select(cmdPath, fixturePath);
+}
+
+test("streamPrompt removes the ephemeral codex home when a consumer breaks out early", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-early-break-"));
+  const homeBase = path.join(tempDir, "homes");
+  const authPath = path.join(tempDir, "auth.json");
+  const fixturePath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "./fixtures/fake-codex.mjs"
+  );
+  const cmdPath = path.join(tempDir, "fake-codex.cmd");
+
+  fs.mkdirSync(homeBase, { recursive: true });
+  fs.writeFileSync(authPath, JSON.stringify({ access_token: "test-token" }), "utf8");
+  fs.writeFileSync(cmdPath, `@echo off\r\n"${process.execPath}" "${fixturePath}" %*\r\n`, "utf8");
+
+  const cliPath = resolveFixtureCliPath(cmdPath, fixturePath);
+  const previousHomeBase = process.env.CODEX_TO_LLM_HOME_BASE;
+  const previousDelay = process.env.FAKE_CODEX_DELAY_MS;
+  process.env.CODEX_TO_LLM_HOME_BASE = homeBase;
+  process.env.FAKE_CODEX_DELAY_MS = "5000";
+
+  const seen: string[] = [];
+  try {
+    for await (const event of streamPrompt("Hello", {
+      authPath,
+      cliPath,
+      timeout: 20000,
+      envPassthrough: ["FAKE_CODEX_DELAY_MS"]
+    })) {
+      seen.push(event.type);
+      break;
+    }
+
+    assert.deepEqual(seen, ["response.started"]);
+    assert.deepEqual(
+      fs.readdirSync(homeBase),
+      [],
+      "ephemeral codex home (containing a copy of auth.json) must not survive an abandoned stream"
+    );
+  } finally {
+    process.env.CODEX_TO_LLM_HOME_BASE = previousHomeBase ?? "";
+    process.env.FAKE_CODEX_DELAY_MS = previousDelay ?? "";
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
 
 test("runPrompt rejects empty prompts before spawning codex", async () => {
   await assert.rejects(runPrompt("   "), /Prompt must not be empty/);

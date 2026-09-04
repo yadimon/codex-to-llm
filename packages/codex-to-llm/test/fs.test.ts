@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -11,8 +11,18 @@ import {
   runPrompt
 } from "../src/index.js";
 
+const tempDirs: string[] = [];
+
+after(() => {
+  for (const dir of tempDirs) {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  }
+});
+
 function makeTempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-test-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-to-llm-test-"));
+  tempDirs.push(dir);
+  return dir;
 }
 
 test("prepareAuthCopy copies auth.json to the requested target", () => {
