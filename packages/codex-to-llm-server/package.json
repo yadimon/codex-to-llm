@@ -1,6 +1,6 @@
 {
   "name": "@yadimon/codex-to-llm-server",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Expose local Codex text and image input through a Responses-compatible HTTP server",
   "type": "module",
   "main": "./dist/index.js",
@@ -50,7 +50,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@yadimon/codex-to-llm": "^1.1.0"
+    "@yadimon/codex-to-llm": "^1.1.1"
   },
   "keywords": [
     "codex",
