@@ -67,8 +67,12 @@ export class AsyncQueue<T> implements AsyncIterableIterator<T> {
       this.close();
       // One shared promise, so a second `return()` waits for the same
       // disposal instead of reporting completion while cleanup is still
-      // running.
-      this.disposal = Promise.resolve(dispose?.()).then(() => undefined);
+      // running. The disposer is invoked *inside* the stored promise so that a
+      // synchronous throw still produces a shared rejection rather than
+      // leaving `disposal` unset for the next caller to redo.
+      this.disposal = Promise.resolve()
+        .then(() => dispose?.())
+        .then(() => undefined);
     }
 
     await this.disposal;

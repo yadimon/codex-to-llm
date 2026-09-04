@@ -110,3 +110,16 @@ test("AsyncQueue stays completed when the disposer reports a failure", async () 
   assert.deepEqual(seen, ["first"]);
   assert.deepEqual(await queue.next(), { value: undefined, done: true });
 });
+
+test("AsyncQueue shares one disposal when the disposer throws synchronously", async () => {
+  let disposeCount = 0;
+  const queue = new AsyncQueue<string>(() => {
+    disposeCount += 1;
+    throw new Error("disposer exploded");
+  });
+
+  await assert.rejects(queue.return(), /disposer exploded/);
+  await assert.rejects(queue.return(), /disposer exploded/);
+
+  assert.equal(disposeCount, 1);
+});

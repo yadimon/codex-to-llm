@@ -57,3 +57,31 @@ test("terminate kills the child it was given", async () => {
 
   assert.equal(killSignals.length > 0, true);
 });
+
+test("terminate leaves no listeners behind after the deadline expires", async () => {
+  const child = createUnresponsiveChild();
+
+  await assert.rejects(terminate(child, 5, 15));
+
+  const emitter = child as unknown as EventEmitter;
+  assert.equal(emitter.listenerCount("close"), 0);
+  assert.equal(emitter.listenerCount("error"), 0);
+});
+
+test("terminate resolves when the child reports an error instead of closing", async () => {
+  const child = createUnresponsiveChild();
+  setTimeout(() => child.emit("error", new Error("spawn failed")), 5);
+
+  await terminate(child, 1000, 2000);
+});
+
+test("terminate stays within its deadline when the child never exits", async () => {
+  const child = createUnresponsiveChild();
+  const startedAt = Date.now();
+
+  await assert.rejects(terminate(child, 20, 60));
+
+  // Generous upper bound: the point is that it returns at all, bounded by the
+  // deadline rather than waiting on the child forever.
+  assert.equal(Date.now() - startedAt < 2000, true);
+});
