@@ -20,7 +20,7 @@ import { terminate } from "./lifecycle.js";
 import { buildChildEnv } from "./env.js";
 import { buildCodexArgs } from "./codex-args.js";
 import { normalizeRunOptions } from "./options.js";
-import { appendBounded, buildAbortError, createCodexExitError } from "./exit.js";
+import { appendBounded, buildAbortError, createCodexExitError, withFailureContext } from "./exit.js";
 import { runPromptDirectApi, streamPromptDirectApi } from "./direct-api.js";
 import { prepareImageFiles, type PreparedImageFiles } from "./images.js";
 import type {
@@ -248,16 +248,13 @@ function streamPromptProcess(
 
     cleanupSettled = terminate(child)
       .catch(terminationError => {
-        const reason = terminationError instanceof Error
-          ? terminationError.message
-          : String(terminationError);
-        error.message = `${error.message} (termination failed: ${reason})`;
+        error = withFailureContext(error, "termination", terminationError);
       })
       .finally(() => {
         // cleanupDirectory rethrows non-ignorable errors; routing them through
         // withCleanupPreserved keeps the original failure and guarantees
         // queue.fail still runs, so a consumer awaiting next() cannot hang.
-        withCleanupPreserved(error, [
+        error = withCleanupPreserved(error, [
           () => cleanupDirectory(workspace, ownsWorkspace),
           () => cleanupDirectory(codexHome, ownsCodexHome)
         ]);
@@ -366,14 +363,12 @@ function streamPromptProcess(
 export const execCodex = runPrompt;
 
 function withCleanupPreserved(error: unknown, cleanupTasks: Array<() => void>): Error {
-  const originalError = error instanceof Error ? error : new Error(String(error));
+  let originalError = error instanceof Error ? error : new Error(String(error));
   for (const cleanupTask of cleanupTasks) {
     try {
       cleanupTask();
     } catch (cleanupError) {
-      originalError.message = `${originalError.message} (cleanup failed: ${
-        cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
-      })`;
+      originalError = withFailureContext(originalError, "cleanup", cleanupError);
     }
   }
   return originalError;

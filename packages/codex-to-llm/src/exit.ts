@@ -1,5 +1,11 @@
 const MAX_STDERR_LENGTH = 64 * 1024;
 
+/** Preserve caller-owned errors, including DOMException and frozen errors. */
+export function withFailureContext(error: Error, phase: string, failure: unknown): Error {
+  const reason = failure instanceof Error ? failure.message : String(failure);
+  return new Error(`${error.message} (${phase} failed: ${reason})`, { cause: error });
+}
+
 export function appendBounded(current: string, nextChunk: string): string {
   const combined = current + nextChunk;
   if (combined.length <= MAX_STDERR_LENGTH) {

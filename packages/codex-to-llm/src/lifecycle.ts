@@ -84,7 +84,9 @@ function watchExit(child: ChildProcessWithoutNullStreams): {
 }
 
 function killDirect(child: ChildProcessWithoutNullStreams, signal?: NodeJS.Signals): void {
-  if (child.killed) {
+  // `killed` only records successful signal delivery, not process exit.
+  // A child ignoring SIGTERM still needs the subsequent SIGKILL.
+  if (child.exitCode !== null || child.signalCode !== null) {
     return;
   }
   try {

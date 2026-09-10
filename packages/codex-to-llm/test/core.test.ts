@@ -324,9 +324,19 @@ test("runPrompt escalates termination when codex ignores SIGTERM", { skip: proce
   process.env.FAKE_CODEX_DELAY_MS = "10000";
   process.env.FAKE_CODEX_IGNORE_SIGTERM = "1";
 
+  const readyPath = path.join(tempDir, "ready");
+  const previousReady = process.env.FAKE_CODEX_READY_PATH;
+  process.env.FAKE_CODEX_READY_PATH = readyPath;
+
   const controller = new AbortController();
-  const abortTimer = setTimeout(() => controller.abort(), 50);
-  const start = Date.now();
+  let abortedAt = 0;
+  const abortTimer = setInterval(() => {
+    if (fs.existsSync(readyPath)) {
+      clearInterval(abortTimer);
+      abortedAt = Date.now();
+      controller.abort();
+    }
+  }, 10);
 
   try {
     await assert.rejects(
@@ -335,13 +345,19 @@ test("runPrompt escalates termination when codex ignores SIGTERM", { skip: proce
         cliPath: fixturePath,
         timeout: 30_000,
         signal: controller.signal,
-        envPassthrough: ["FAKE_CODEX_DELAY_MS", "FAKE_CODEX_IGNORE_SIGTERM"]
+        envPassthrough: ["FAKE_CODEX_DELAY_MS", "FAKE_CODEX_IGNORE_SIGTERM", "FAKE_CODEX_READY_PATH"]
       })
     );
-    const elapsed = Date.now() - start;
+    assert(abortedAt > 0, "child must install its SIGTERM handler before abort");
+    const elapsed = Date.now() - abortedAt;
     assert(elapsed < 4000, `escalation should complete within grace, got ${elapsed}ms`);
   } finally {
-    clearTimeout(abortTimer);
+    clearInterval(abortTimer);
+    if (previousReady == null) {
+      delete process.env.FAKE_CODEX_READY_PATH;
+    } else {
+      process.env.FAKE_CODEX_READY_PATH = previousReady;
+    }
     if (previousDelay == null) {
       delete process.env.FAKE_CODEX_DELAY_MS;
     } else {

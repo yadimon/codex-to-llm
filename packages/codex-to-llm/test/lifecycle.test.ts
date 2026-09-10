@@ -27,6 +27,24 @@ test("terminate returns immediately when the child has already exited", async ()
   await terminate(child, 10, 20);
 });
 
+test("terminate escalates after SIGTERM was delivered but ignored", { skip: process.platform === "win32" }, async () => {
+  const child = createUnresponsiveChild();
+  const signals: Array<NodeJS.Signals | number | undefined> = [];
+  Object.assign(child, {
+    kill: (signal?: NodeJS.Signals | number) => {
+      signals.push(signal);
+      Object.assign(child, { killed: true });
+      if (signal === "SIGKILL") {
+        Object.assign(child, { signalCode: signal });
+        child.emit("close", null, signal);
+      }
+      return true;
+    }
+  });
+  await terminate(child, 5, 500);
+  assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
+});
+
 test("terminate resolves once the child closes within the grace period", async () => {
   const child = createUnresponsiveChild();
   setTimeout(() => child.emit("close", 0, null), 5);

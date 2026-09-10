@@ -18,6 +18,10 @@ if (process.env.FAKE_CODEX_IGNORE_SIGTERM) {
   process.on("SIGTERM", () => {});
 }
 
+if (process.env.FAKE_CODEX_READY_PATH) {
+  fs.writeFileSync(process.env.FAKE_CODEX_READY_PATH, String(process.pid));
+}
+
 if (process.env.FAKE_CODEX_DUMP_ENV) {
   fs.writeFileSync(
     process.env.FAKE_CODEX_DUMP_ENV,
