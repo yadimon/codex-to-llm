@@ -119,7 +119,14 @@ async function smokeServerCli(): Promise<void> {
     }
     console.log(`[smoke] server OK in ${Date.now() - start}ms; output: ${JSON.stringify(json.output_text)}`);
   } finally {
-    if (!child.killed) {
+    if (process.platform === "win32" && child.pid !== undefined) {
+      // Killing cmd.exe alone leaves the npx server running with open pipes.
+      execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
+        windowsHide: true,
+        stdio: "ignore",
+        timeout: 10_000
+      });
+    } else {
       child.kill();
     }
     if (stderrChunks.length > 0) {
