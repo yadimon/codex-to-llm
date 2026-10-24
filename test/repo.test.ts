@@ -45,12 +45,25 @@ const serverPackageJson = JSON.parse(
 test("root package.json keeps workspace verification wired through npm test", () => {
   assert.equal(rootPackageJson.private, true);
   assert.deepEqual(rootPackageJson.workspaces, ["packages/*"]);
+  assert.equal(rootPackageJson.scripts["test:repo"], "tsx ./scripts/run-root-node-tests.ts");
   assert.equal(
     rootPackageJson.scripts.test,
-    "tsx ./scripts/run-root-node-tests.ts && tsx ./scripts/run-workspace-tests.ts"
+    "npm run test:repo && tsx ./scripts/run-workspace-tests.ts"
   );
   assert.equal(rootPackageJson.scripts.verify, "npm run lint && npm run typecheck && npm test && npm run build");
-  assert.equal(rootPackageJson.scripts.check, "npm run verify && npm run pack && npm run publish:dry-run");
+  // The publish rehearsal is deliberately not part of check: from npm 11 on
+  // `npm publish --dry-run` refuses an already published version, so it only belongs
+  // where the version is new, in the release script and the publish workflow.
+  assert.equal(rootPackageJson.scripts.check, "npm run verify && npm run pack");
+});
+
+test("root test runner fails the process when a test fails", () => {
+  const runnerScript = fs.readFileSync(
+    path.join(repoRoot, "scripts", "run-root-node-tests.ts"),
+    "utf8"
+  );
+  assert.match(runnerScript, /stream\.on\("test:fail", \(\) => \{\s*process\.exitCode = 1;/);
+  assert.doesNotMatch(runnerScript, /stream\.on\("done"/);
 });
 
 test("workspace test runner covers both published workspaces and both e2e paths", () => {
@@ -62,18 +75,19 @@ test("workspace test runner covers both published workspaces and both e2e paths"
 
 test("CI workflow verifies supported node versions and Docker flow", () => {
   assert.match(ciWorkflow, /name: CI/);
-  assert.match(ciWorkflow, /-\s+20/);
   assert.match(ciWorkflow, /-\s+22/);
+  assert.match(ciWorkflow, /-\s+24/);
+  assert.match(ciWorkflow, /name: Test repository rules/);
+  assert.match(ciWorkflow, /npm run test:repo/);
   assert.match(ciWorkflow, /name: Test core package/);
   assert.match(ciWorkflow, /name: Test server package/);
   assert.match(ciWorkflow, /name: Core e2e/);
   assert.match(ciWorkflow, /name: Server e2e/);
   assert.match(ciWorkflow, /name: Pack core package/);
   assert.match(ciWorkflow, /name: Pack server package/);
-  assert.match(ciWorkflow, /name: Publish core package dry run/);
-  assert.match(ciWorkflow, /name: Publish server package dry run/);
-  assert.match(ciWorkflow, /npm run publish:dry-run --workspace @yadimon\/codex-to-llm/);
-  assert.match(ciWorkflow, /npm run publish:dry-run --workspace @yadimon\/codex-to-llm-server/);
+  // No publish rehearsal in the per-commit gate; it would fail on every commit whose
+  // version is already published once the runner uses npm 11.
+  assert.doesNotMatch(ciWorkflow, /publish:dry-run/);
   assert.match(ciWorkflow, /docker:/);
   assert.match(ciWorkflow, /npm run test:docker/);
 });
@@ -99,6 +113,14 @@ test("release script keeps annotated tags, explicit pushes, and cascades core re
   assert.match(releaseScript, /Working tree must be clean before creating a release commit/);
   assert.match(releaseScript, /runNpm\(\["run", "check"\]\)/);
   assert.match(releaseScript, /runNpm\(\["install", "--package-lock-only", "--ignore-scripts"\]\)/);
+  assert.match(
+    releaseScript,
+    /runNpm\(\["run", "publish:dry-run", "--workspace", releaseTarget\.workspaceName\]\)/
+  );
+  assert.match(
+    releaseScript,
+    /refreshWorkspaceLockfile\(\);\s*rehearsePublish\(releaseTargets\);\s*runGit\(\["add"/
+  );
   assert.match(releaseScript, /return \[\s*createReleaseTarget\(CORE_WORKSPACE, releaseBumpType, releaseTagPrefix\),/);
   assert.match(releaseScript, /createReleaseTarget\(SERVER_WORKSPACE, "patch", "codex-to-llm-server"\)/);
   assert.match(releaseScript, /runGit\(\["tag", "-a", tagName, "-m", `Release \$\{tagName\}`\]\)/);

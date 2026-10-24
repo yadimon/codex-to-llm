@@ -13,6 +13,12 @@ npm workspaces monorepo (`workspaces: ["packages/*"]`, `type: "module"`, Node `>
 
 When adding behavior, put it in core first. The server package stays a transport/adapter layer.
 
+Both published packages declare `engines.node: ">=20"`, and that is the runtime
+contract. The CI Node matrix is the development toolchain only and currently runs 22
+and 24, tracking supported Node releases and the version `publish.yml` publishes
+from. Changing the runtime contract means changing `engines` in both packages, the
+docs and the release notes together.
+
 ## Commands
 
 Root (runs across both workspaces):
@@ -24,7 +30,7 @@ npm run typecheck           # tsc -b project references, no emit
 npm test                    # root repo tests + each workspace's test and e2e scripts
 npm run build               # tsc -b both workspaces (core dist/ must exist before server)
 npm run verify              # lint + typecheck + test + build (PR gate)
-npm run check               # verify + pack + publish:dry-run (pre-release gate)
+npm run check               # verify + pack (pre-release gate)
 npm run release:check       # full release readiness incl. Docker e2e
 npm run test:docker         # build the server image and verify against live HTTP
 

@@ -78,6 +78,7 @@ function main(): void {
   bumpReleaseTargets(releaseTargets);
   hydrateReleaseTargetVersions(releaseTargets);
   refreshWorkspaceLockfile();
+  rehearsePublish(releaseTargets);
   runGit(["add", ...collectFilesToAdd(releaseTargets)]);
   runGit(["commit", "-m", createReleaseCommitMessage(releaseTargets)]);
   const tagNames = createReleaseTags(releaseTargets);
@@ -100,6 +101,15 @@ function syncServerDependencyToCore(): void {
   };
 
   fs.writeFileSync(serverPackageJsonPath, `${JSON.stringify(serverPackageJson, null, 2)}\n`);
+}
+
+// Only the bumped workspaces are rehearsed. From npm 11 on `npm publish --dry-run`
+// refuses an already published version, so rehearsing an untouched workspace would
+// fail every time, for example core during a server-only release.
+function rehearsePublish(releaseTargets: ReleaseTarget[]): void {
+  for (const releaseTarget of releaseTargets) {
+    runNpm(["run", "publish:dry-run", "--workspace", releaseTarget.workspaceName]);
+  }
 }
 
 function refreshWorkspaceLockfile(): void {

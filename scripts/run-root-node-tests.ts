@@ -11,19 +11,17 @@ const testFiles = fs
   .sort()
   .map(name => path.join(testDir, name));
 
-let failed = false;
 const stream = run({
   files: testFiles,
   isolation: "none",
   execArgv: ["--import", "tsx/esm"]
 });
 
+// Set the exit code as failures arrive. The stream returned by run() emits "end",
+// not "done", so deferring this to a "done" listener never ran and the runner
+// reported failing tests while still exiting 0.
 stream.on("test:fail", () => {
-  failed = true;
-});
-
-stream.on("done", () => {
-  process.exitCode = failed ? 1 : 0;
+  process.exitCode = 1;
 });
 
 stream.compose(spec()).pipe(process.stdout);

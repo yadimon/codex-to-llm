@@ -14,8 +14,8 @@ jobs:
       fail-fast: false
       matrix:
         node-version:
-          - 20
           - 22
+          - 24
 
     steps:
       - name: Checkout
@@ -35,6 +35,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Test repository rules
+        run: npm run test:repo
 
       - name: Test core package
         run: npm run test --workspace @yadimon/codex-to-llm
@@ -56,12 +59,6 @@ jobs:
 
       - name: Pack server package
         run: npm run pack --workspace @yadimon/codex-to-llm-server
-
-      - name: Publish core package dry run
-        run: npm run publish:dry-run --workspace @yadimon/codex-to-llm
-
-      - name: Publish server package dry run
-        run: npm run publish:dry-run --workspace @yadimon/codex-to-llm-server
 
   docker:
     runs-on: ubuntu-latest
