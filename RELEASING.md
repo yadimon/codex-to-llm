@@ -66,12 +66,21 @@ npm run release:server:major
 
 These scripts:
 
-- run `npm run check`
+- run `npm run check` (lint, typecheck, tests, build, pack)
 - bump only the selected workspace version
 - update the server's `@yadimon/codex-to-llm` dependency automatically when releasing core
+- rehearse `npm publish --dry-run` for the bumped workspaces only
 - create a release commit
 - create a package-specific Git tag
 - push the commit and tag to `origin`
+
+The rehearsal runs after the bump because from npm 11 on `npm publish --dry-run`
+queries the registry and refuses a version that is already published, so it can
+only pass once the version is new. `npm run check` therefore stops at packaging
+validation. If the rehearsal fails, the bumped manifests and lockfile are left in
+the working tree and nothing is committed, tagged or pushed; restore them with
+`git checkout -- package-lock.json packages` before retrying, because the script
+requires a clean tree.
 
 GitHub Actions publishes only the package that matches the pushed tag.
 
@@ -93,28 +102,22 @@ A green `Publish` run proves the tarball was accepted, not that the published ar
 
 ## Manual Equivalent
 
-Core package:
+There is deliberately no hand-written equivalent here. The release scripts are the
+supported path because they enforce things a copied command list does not:
 
-```bash
-npm run check
-npm version patch --workspace @yadimon/codex-to-llm --no-git-tag-version
-node -e "const fs=require('node:fs'); const p='packages/codex-to-llm-server/package.json'; const pkg=JSON.parse(fs.readFileSync(p,'utf8')); pkg.dependencies['@yadimon/codex-to-llm']='^<version>'; fs.writeFileSync(p, JSON.stringify(pkg, null, 2)+'\n');"
-git add package-lock.json packages/codex-to-llm/package.json packages/codex-to-llm-server/package.json
-git commit -m "release(codex-to-llm): <version>"
-git tag -a codex-to-llm-v<version> -m "Release codex-to-llm-v<version>"
-git push origin HEAD codex-to-llm-v<version>
-```
+- the working tree must be clean before anything is changed
+- the publish rehearsal runs on the **bumped** versions, after the lockfile refresh
+  and before anything is staged, so a failed rehearsal cannot be followed by a
+  commit, tag and push
+- only the workspaces actually being released are rehearsed, because from npm 11 on
+  `npm publish --dry-run` refuses an already published version and an untouched
+  workspace would fail every time
+- a core release also patches the server and rewrites its core dependency range
+- every step must succeed before the next one runs
 
-Server package:
-
-```bash
-npm run check
-npm version patch --workspace @yadimon/codex-to-llm-server --no-git-tag-version
-git add package-lock.json packages/codex-to-llm-server/package.json
-git commit -m "release(codex-to-llm-server): <version>"
-git tag -a codex-to-llm-server-v<version> -m "Release codex-to-llm-server-v<version>"
-git push origin HEAD codex-to-llm-server-v<version>
-```
+If you have to reproduce a release by hand, read `scripts/release-workspace.ts` and
+keep those guarantees, rather than working from a copy of the commands that can
+drift out of sync with the script.
 
 ## Notes
 
